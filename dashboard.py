@@ -161,7 +161,7 @@ if menu == "📡 Live Radar":
         st.markdown('<div class="panel-kiri">', unsafe_allow_html=True)
         st.markdown("### 📡 Live Engine\n<span style='font-size:12px; color:#8a92b2;'>AI Top Feed v8.6</span>", unsafe_allow_html=True)
         st.write("")
-        st.caption("Auto-refresh tiap 15 detik. Input terbaru otomatis berada di posisi paling atas.")
+        st.caption("Auto-refresh tiap 3 detik. Input terbaru otomatis berada di posisi paling atas.")
         st.divider()
         st.markdown(f"""
         <div style='font-size:12px; color:#8a92b2;'>
@@ -216,7 +216,7 @@ if menu == "📡 Live Radar":
                         </div>
                         <div><div class="pl-amount" style="color:white;">Entry: Rp {last_price}</div></div>
                     </div>""", unsafe_allow_html=True)
-    time.sleep(15)  
+    time.sleep(3)  
     st.rerun() 
 
 # ==========================================
