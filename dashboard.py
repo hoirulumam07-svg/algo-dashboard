@@ -138,12 +138,12 @@ def parse_idx_data(file):
     except: return {}
 
 # --- 3. MENU UTAMA ---
-st.markdown("<h2 style='text-align: center;'>⚙️ Capelang Algo App <span style='font-size:16px; color:#8a92b2;'>v8.5 (Auto-Magic)</span></h2>", unsafe_allow_html=True)
+st.markdown("<h2 style='text-align: center;'>⚙️ Capelang Algo App <span style='font-size:16px; color:#8a92b2;'>v8.6</span></h2>", unsafe_allow_html=True)
 menu = st.radio("Mode:", ["📡 Live Radar", "📋 Evaluator Manual", "🏆 Evaluator EOD"], horizontal=True, label_visibility="collapsed")
 st.divider()
 
 # ==========================================
-# APLIKASI 1: LIVE RADAR
+# APLIKASI 1: LIVE RADAR (TOP FEED FIXED)
 # ==========================================
 if menu == "📡 Live Radar":
     @st.cache_data(ttl=15) 
@@ -159,9 +159,9 @@ if menu == "📡 Live Radar":
 
     with col_kiri:
         st.markdown('<div class="panel-kiri">', unsafe_allow_html=True)
-        st.markdown("### 📡 Live Engine\n<span style='font-size:12px; color:#8a92b2;'>AI Ultimate Brain v8.5</span>", unsafe_allow_html=True)
+        st.markdown("### 📡 Live Engine\n<span style='font-size:12px; color:#8a92b2;'>AI Top Feed v8.6</span>", unsafe_allow_html=True)
         st.write("")
-        st.caption("Auto-refresh tiap 5 detik.")
+        st.caption("Auto-refresh tiap 15 detik. Input terbaru otomatis berada di posisi paling atas.")
         st.divider()
         st.markdown(f"""
         <div style='font-size:12px; color:#8a92b2;'>
@@ -176,11 +176,16 @@ if menu == "📡 Live Radar":
         if df_live.empty: st.info("✅ Sistem siap! Menunggu sinyal market masuk hari ini...")
         else:
             if 'Ticker' in df_live.columns and 'Price' in df_live.columns:
-                tickers_terbaru = df_live.drop_duplicates(subset=['Ticker'], keep='last').iloc[::-1]['Ticker'].tolist()
+                # ⚡ KUNCI RAHASIA: Balikkan urutan dataframe (Bawah jadi Atas) sebelum diambil nilai uniknya
+                df_live_reversed = df_live.iloc[::-1]
+                tickers_terbaru = df_live_reversed['Ticker'].drop_duplicates().tolist()
+                
                 for ticker in tickers_terbaru:
+                    # Ambil semua data historis saham ini (tetap pakai df_live asli agar urutan waktu tidak rusak)
                     data_saham = df_live[df_live['Ticker'] == ticker]
                     if data_saham.empty: continue
-                    algos_saham_ini = data_saham['Algo'].dropna().tolist() if 'Algo' in data_saham.columns else []
+                    
+                    algos_saham_ini = data_saham['Algo'].dropna().tolist()
                     last_price = data_saham['Price'].iloc[-1]
                     last_time = data_saham['Waktu'].iloc[-1] if 'Waktu' in data_saham.columns else ""
                     
@@ -211,29 +216,26 @@ if menu == "📡 Live Radar":
                         </div>
                         <div><div class="pl-amount" style="color:white;">Entry: Rp {last_price}</div></div>
                     </div>""", unsafe_allow_html=True)
-    time.sleep(5)  
+    time.sleep(15)  
     st.rerun() 
 
 # ==========================================
-# APLIKASI 2: EVALUATOR MANUAL (TERSIMPAN)
+# APLIKASI 2: EVALUATOR MANUAL
 # ==========================================
 elif menu == "📋 Evaluator Manual":
     col_in, col_out = st.columns([1, 2.5], gap="large")
     with col_in:
         st.markdown('<div class="panel-kiri">', unsafe_allow_html=True)
         st.markdown("### 📋 Evaluator Teks")
-        
         teks_input = st.text_area("Paste Sinyal Telegram di sini:", value=st.session_state['manual_txt'], height=250)
         if teks_input != st.session_state['manual_txt']:
             st.session_state['manual_txt'] = teks_input
             st.rerun()
-            
         st.caption("Data lu otomatis tersimpan di memori saat lu pindah tab.")
         if st.button("🗑️ Bersihkan Teks", use_container_width=True):
             st.session_state['manual_txt'] = ""
             st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
-        
     with col_out:
         if st.session_state['manual_txt']:
             algo_match = re.search(r'Algo Name\s*:\s*(.+)', st.session_state['manual_txt'], re.IGNORECASE)
@@ -242,28 +244,24 @@ elif menu == "📋 Evaluator Manual":
             if matches:
                 st.success(f"✅ Berhasil mendeteksi {len(matches)} saham dari sinyal '{algo_name}'")
                 data_sim = [{"No": i+1, "Ticker": m[0], "Algo": algo_name, "Harga Entry": int(m[1]), "Status": "RUNNING"} for i, m in enumerate(matches) if m[0] not in ['NAMA', 'DATA', 'HARG']]
-                if data_sim:
-                    st.dataframe(pd.DataFrame(data_sim), use_container_width=True, hide_index=True)
+                if data_sim: st.dataframe(pd.DataFrame(data_sim), use_container_width=True, hide_index=True)
             else: st.error("❌ Tidak ada format tabel saham yang terdeteksi di teks lu.")
         else: st.info("👈 Silakan tempel teks sinyal dari Telegram di panel sebelah kiri.")
 
 # ==========================================
-# APLIKASI 3: EVALUATOR EOD (AUTO-MAGIC)
+# APLIKASI 3: EVALUATOR EOD
 # ==========================================
 elif menu == "🏆 Evaluator EOD":
     col1, col2 = st.columns(2)
-    
-    # KOTAK KIRI: SINYAL
     with col1:
         st.markdown("### 1️⃣ Sumber Data Sinyal")
         sumber_sinyal = st.radio("Pilih sumber sinyal lu:", ["📂 Upload Sinyal Manual (Telegram/CSV)", "📡 Otomatis (Google Sheets)"], key="rad_sinyal")
-        
         if sumber_sinyal == "📂 Upload Sinyal Manual (Telegram/CSV)":
             if st.session_state['eod_mentah'].empty:
                 file_sinyal = st.file_uploader("Upload File Sinyal (TXT/CSV)", type=['csv', 'txt'])
                 if file_sinyal:
                     st.session_state['eod_mentah'] = parse_telegram_log_bulletproof(file_sinyal)
-                    st.session_state['eod_hasil'] = None # Paksa AI buat ngitung ulang
+                    st.session_state['eod_hasil'] = None
                     st.rerun()
             else:
                 st.success(f"✅ Data Sinyal Tersimpan di Memori ({len(st.session_state['eod_mentah'])} Sinyal).")
@@ -276,24 +274,19 @@ elif menu == "🏆 Evaluator EOD":
                 df_temp = pd.read_csv(SHEET_CSV_URL)
                 if not df_temp.empty: 
                     st.session_state['eod_mentah'] = standarisasi_kolom(df_temp)
-                    # Biar nggak ngitung ulang terus kalau data sheets nggak berubah
-                    if st.session_state['eod_hasil'] is None:
-                        st.session_state['eod_hasil'] = None 
                     st.success(f"✅ Sinkronisasi Google Sheets Sukses ({len(st.session_state['eod_mentah'])} Sinyal).")
                 else: st.warning("Sheets Kosong")
             except Exception as e: st.error(f"⚠️ Gagal terhubung ke Google Sheets: {e}")
 
-    # KOTAK KANAN: HARGA IDX
     with col2:
         st.markdown("### 2️⃣ Sumber Harga EOD (Penutupan)")
         sumber_eod = st.radio("Pilih sumber harga EOD lu:", ["📊 Upload Data Resmi IDX (.xls/.xlsx/.csv)", "📡 Otomatis (Yahoo Finance)"], key="rad_eod")
-        
         if sumber_eod == "📊 Upload Data Resmi IDX (.xls/.xlsx/.csv)":
             if not st.session_state['eod_idx']:
                 file_idx = st.file_uploader("Upload File dari IDX", type=['xlsx', 'xls', 'csv'])
                 if file_idx:
                     st.session_state['eod_idx'] = parse_idx_data(file_idx)
-                    st.session_state['eod_hasil'] = None # Paksa AI buat ngitung ulang pake data IDX baru
+                    st.session_state['eod_hasil'] = None
                     st.rerun()
             else:
                 st.success(f"✅ Data IDX Tersimpan di Memori ({len(st.session_state['eod_idx'])} Emiten).")
@@ -308,74 +301,50 @@ elif menu == "🏆 Evaluator EOD":
                 st.rerun()
             st.info("📡 AI akan menarik harga langsung dari Yahoo Finance.")
 
-    st.divider()
+st.divider()
 
-    # --- FUNGSI PROSES EOD ---
-    def proses_data_eod(df, harga_idx_manual):
-        df_olah = df.copy()
-        df_olah['Price'] = pd.to_numeric(df_olah['Price'], errors='coerce')
-        df_olah = df_olah.dropna(subset=['Ticker', 'Price'])
-        
-        tickers = df_olah['Ticker'].unique()
-        close_prices = {}
-        
-        if len(tickers) > 0:
-            st.write("🤖 **Memproses Evaluasi End of Day... (Otomatis)**")
-            progress_bar = st.progress(0)
-            
-            for i, ticker in enumerate(tickers):
-                if harga_idx_manual and ticker in harga_idx_manual:
-                    close_prices[ticker] = float(harga_idx_manual[ticker])
-                else:
-                    try:
-                        data_saham = yf.Ticker(f"{ticker}.JK").history(period="5d")
-                        if not data_saham.empty: close_prices[ticker] = float(data_saham['Close'].iloc[-1])
-                        else: close_prices[ticker] = float(df_olah[df_olah['Ticker']==ticker]['Price'].iloc[-1])
-                    except: close_prices[ticker] = float(df_olah[df_olah['Ticker']==ticker]['Price'].iloc[-1])
-                    
-                progress_bar.progress((i + 1) / len(tickers))
-            progress_bar.empty()
+def proses_data_eod(df, harga_idx_manual):
+    df_olah = df.copy()
+    df_olah['Price'] = pd.to_numeric(df_olah['Price'], errors='coerce')
+    df_olah = df_olah.dropna(subset=['Ticker', 'Price'])
+    tickers = df_olah['Ticker'].unique()
+    close_prices = {}
+    if len(tickers) > 0:
+        st.write("🤖 **Memproses Evaluasi End of Day... (Otomatis)**")
+        progress_bar = st.progress(0)
+        for i, ticker in enumerate(tickers):
+            if harga_idx_manual and ticker in harga_idx_manual:
+                close_prices[ticker] = float(harga_idx_manual[ticker])
+            else:
+                try:
+                    data_saham = yf.Ticker(f"{ticker}.JK").history(period="5d")
+                    close_prices[ticker] = float(data_saham['Close'].iloc[-1]) if not data_saham.empty else float(df_olah[df_olah['Ticker']==ticker]['Price'].iloc[-1])
+                except: close_prices[ticker] = float(df_olah[df_olah['Ticker']==ticker]['Price'].iloc[-1])
+            progress_bar.progress((i + 1) / len(tickers))
+        progress_bar.empty()
+    df_olah['EOD_Close'] = df_olah['Ticker'].map(close_prices)
+    df_olah['Profit_%'] = ((df_olah['EOD_Close'] - df_olah['Price']) / df_olah['Price']) * 100
+    df_olah['Status'] = df_olah['Profit_%'].apply(lambda x: 'WIN 🟢' if x > 0 else ('LOSS 🔴' if x < 0 else 'BEP ⚪'))
+    return df_olah
 
-        df_olah['EOD_Close'] = df_olah['Ticker'].map(close_prices)
-        df_olah['Profit_%'] = ((df_olah['EOD_Close'] - df_olah['Price']) / df_olah['Price']) * 100
-        df_olah['Status'] = df_olah['Profit_%'].apply(lambda x: 'WIN 🟢' if x > 0 else ('LOSS 🔴' if x < 0 else 'BEP ⚪'))
-        return df_olah
-
-    # --- TAMPILAN HASIL (AUTO-MAGIC) ---
-    if not st.session_state['eod_mentah'].empty:
-        
-        # 1. Kalau belum ngitung, langsung hitung otomatis! Nggak usah nunggu tombol diklik!
-        if st.session_state['eod_hasil'] is None:
-            st.session_state['eod_hasil'] = proses_data_eod(st.session_state['eod_mentah'], st.session_state['eod_idx'])
-            
-        # 2. Ambil hasilnya dari brankas
-        df_eod = st.session_state['eod_hasil']
-        
-        if df_eod.empty:
-            st.warning("Data gagal diproses. Pastikan file lu berisi riwayat saham dan harga.")
-        else:
-            col_head1, col_head2 = st.columns([4, 1])
-            with col_head1: st.subheader("🔥 Ranking Performa Algo Hari Ini")
-            with col_head2:
-                if st.button("🔄 Hitung Ulang", use_container_width=True):
-                    st.session_state['eod_hasil'] = None
-                    st.rerun()
-
-            if 'Algo' in df_eod.columns:
-                algo_stats = df_eod.groupby('Algo').apply(
-                    lambda x: pd.Series({
-                        'Total Sinyal': len(x), 'Win': len(x[x['Status'] == 'WIN 🟢']),
-                        'Loss': len(x[x['Status'] == 'LOSS 🔴']), 'BEP': len(x[x['Status'] == 'BEP ⚪']),
-                        'Win Rate (%)': (len(x[x['Status'] == 'WIN 🟢']) / len(x)) * 100,
-                        'Rata-rata Profit (%)': x['Profit_%'].mean()
-                    })
-                ).reset_index().sort_values(by=['Win Rate (%)', 'Rata-rata Profit (%)'], ascending=[False, False])
-                st.dataframe(algo_stats.style.format({'Total Sinyal': '{:.0f}', 'Win': '{:.0f}', 'Loss': '{:.0f}', 'BEP': '{:.0f}', 'Win Rate (%)': '{:.1f}%', 'Rata-rata Profit (%)': '{:+.2f}%'}), use_container_width=True, hide_index=True)
-            
-            st.divider()
-            st.subheader("🧬 Saham dengan Combo Algo")
-            if 'Algo' in df_eod.columns:
-                combo_data = df_eod.groupby('Ticker').apply(lambda x: pd.Series({'Jumlah Algo': len(x['Algo'].unique()), 'Nama Algo (Combo)': " + ".join(x['Algo'].unique()), 'Harga Entry (Awal)': x['Price'].iloc[0], 'Harga EOD': x['EOD_Close'].iloc[0], 'Total Profit (%)': x['Profit_%'].iloc[0], 'Hasil Akhir': x['Status'].iloc[0]})).reset_index()
-                combo_data_only = combo_data[combo_data['Jumlah Algo'] > 1].sort_values(by='Total Profit (%)', ascending=False)
-                if not combo_data_only.empty: st.dataframe(combo_data_only.style.format({'Harga Entry (Awal)': '{:.0f}', 'Harga EOD': '{:.0f}', 'Total Profit (%)': '{:+.2f}%'}), use_container_width=True, hide_index=True)
-                else: st.info("Tidak ada saham yang mendapatkan sinyal Combo di data ini.")
+if menu == "🏆 Evaluator EOD" and not st.session_state['eod_mentah'].empty:
+    if st.session_state['eod_hasil'] is None:
+        st.session_state['eod_hasil'] = proses_data_eod(st.session_state['eod_mentah'], st.session_state['eod_idx'])
+    df_eod = st.session_state['eod_hasil']
+    
+    if not df_eod.empty:
+        col_head1, col_head2 = st.columns([4, 1])
+        with col_head1: st.subheader("🔥 Ranking Performa Algo Hari Ini")
+        with col_head2:
+            if st.button("🔄 Hitung Ulang", use_container_width=True):
+                st.session_state['eod_hasil'] = None
+                st.rerun()
+        if 'Algo' in df_eod.columns:
+            algo_stats = df_eod.groupby('Algo').apply(lambda x: pd.Series({'Total Sinyal': len(x), 'Win': len(x[x['Status'] == 'WIN 🟢']), 'Loss': len(x[x['Status'] == 'LOSS 🔴']), 'BEP': len(x[x['Status'] == 'BEP ⚪']), 'Win Rate (%)': (len(x[x['Status'] == 'WIN 🟢']) / len(x)) * 100, 'Rata-rata Profit (%)': x['Profit_%'].mean()})).reset_index().sort_values(by=['Win Rate (%)', 'Rata-rata Profit (%)'], ascending=[False, False])
+            st.dataframe(algo_stats.style.format({'Total Sinyal': '{:.0f}', 'Win': '{:.0f}', 'Loss': '{:.0f}', 'BEP': '{:.0f}', 'Win Rate (%)': '{:.1f}%', 'Rata-rata Profit (%)': '{:+.2f}%'}), use_container_width=True, hide_index=True)
+        st.divider()
+        st.subheader("🧬 Saham dengan Combo Algo")
+        if 'Algo' in df_eod.columns:
+            combo_data = df_eod.groupby('Ticker').apply(lambda x: pd.Series({'Jumlah Algo': len(x['Algo'].unique()), 'Nama Algo (Combo)': " + ".join(x['Algo'].unique()), 'Harga Entry (Awal)': x['Price'].iloc[0], 'Harga EOD': x['EOD_Close'].iloc[0], 'Total Profit (%)': x['Profit_%'].iloc[0], 'Hasil Akhir': x['Status'].iloc[0]})).reset_index()
+            combo_data_only = combo_data[combo_data['Jumlah Algo'] > 1].sort_values(by='Total Profit (%)', ascending=False)
+            if not combo_data_only.empty: st.dataframe(combo_data_only.style.format({'Harga Entry (Awal)': '{:.0f}', 'Harga EOD': '{:.0f}', 'Total Profit (%)': '{:+.2f}%'}), use_container_width=True, hide_index=True)
