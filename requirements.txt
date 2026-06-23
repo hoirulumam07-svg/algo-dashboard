@@ -1,3 +1,7 @@
 streamlit
 pandas
-plotly
+yfinance
+openpyxl
+xlrd
+lxml
+html5lib
