@@ -12,13 +12,13 @@ st.set_page_config(page_title="Capelang Algo App", layout="wide")
 # ==========================================
 # 🛰️ KONEKSI LIVE REAL-TIME RADAR (REDIS)
 # ==========================================
-# Ganti dengan URL Redis resmi yang lu dapet dari Upstash tadi bro!
-REDIS_URL = "redis://default:gQAAAAAAAXJKAAIgcDJmMGY1OGMyYWE2ZDM0NWMzODA1YTAxMDFmMTE4Yzk4ZQ@engaged-tapir-94794.upstash.io:6379"
+# Sudah dikunci menggunakan URL database Upstash resmi lu (Secure TLS Enabled)
+REDIS_URL = "rediss://default:gQAAAAAAAXJKAAIgcDJmMGY1OGMyYWE2ZDM0NWMzODA1YTAxMDFmMTE4Yzk4ZQ@engaged-tapir-94794.upstash.io:6379"
 
 @st.cache_resource
 def get_redis_client():
     try:
-        return redis.Redis.from_url(REDIS_URL, decode_responses=True)
+        return redis.Redis.from_url(REDIS_URL, decode_responses=True, socket_timeout=5)
     except:
         return None
 
@@ -32,7 +32,7 @@ if 'eod_mentah' not in st.session_state: st.session_state['eod_mentah'] = pd.Dat
 if 'eod_idx' not in st.session_state: st.session_state['eod_idx'] = {}
 if 'eod_hasil' not in st.session_state: st.session_state['eod_hasil'] = None
 
-# --- INJEKSI CSS CUSTOM (UI Dark Mode) ---
+# --- 2. INJEKSI CSS CUSTOM (UI Dark Mode) ---
 st.markdown("""
     <style>
     .stApp { background-color: #111526; color: white; }
@@ -149,38 +149,41 @@ def parse_idx_data(file):
         else: return {}
     except: return {}
 
-# --- MENU UTAMA ---
-st.markdown("<h2 style='text-align: center;'>⚙️ Capelang Algo App <span style='font-size:16px; color:#8a92b2;'>v8.7 (Real-Time Speed)</span></h2>", unsafe_allow_html=True)
+# --- 3. MENU UTAMA ---
+st.markdown("<h2 style='text-align: center;'>⚙️ Capelang Algo App <span style='font-size:16px; color:#8a92b2;'>v8.8 (Live connected)</span></h2>", unsafe_allow_html=True)
 menu = st.radio("Mode:", ["📡 Live Radar", "📋 Evaluator Manual", "🏆 Evaluator EOD"], horizontal=True, label_visibility="collapsed")
 st.divider()
 
 # ==========================================
-# APLIKASI 1: LIVE RADAR (KILAT REDIS)
+# APLIKASI 1: LIVE RADAR (SPEED ENGINE)
 # ==========================================
 if menu == "📡 Live Radar":
     df_live = pd.DataFrame()
     engine_status = "⚠️ Mode Google Sheets (Normal Delay)"
     
-    # Ambil data dari Memori Kilat Redis
+    # Mencoba sedot data dari server Redis Upstash lu
     if r_client:
         try:
             raw_signals = r_client.lrange("live_signals", 0, -1)
             if raw_signals:
                 signals_list = []
                 for sig in raw_signals:
-                    parts = sig.split("|") # Format kiriman: Waktu|Algo|Ticker|Price
+                    parts = sig.split("|")
                     if len(parts) == 4:
                         signals_list.append({'Waktu': parts[0], 'Algo': parts[1], 'Ticker': parts[2], 'Price': float(parts[3])})
                 df_live = pd.DataFrame(signals_list)
                 engine_status = "⚡ Mode Redis Kilat (0 Detik Delay)"
-        except: pass
+        except:
+            pass
 
-    # Fallback: Kalau Redis kosong/gagal, pakai Google Sheets lama
+    # Jalur Cadangan (Fallback): Jika Redis kosong atau bermasalah
     if df_live.empty:
         try:
-            df_live = pd.read_csv(SHEET_CSV_URL)
-            df_live = standarisasi_kolom(df_live).dropna(subset=['Ticker', 'Price'])
-        except: pass
+            df_temp = pd.read_csv(SHEET_CSV_URL)
+            if not df_temp.empty:
+                df_live = standarisasi_kolom(df_temp).dropna(subset=['Ticker', 'Price'])
+        except:
+            pass
 
     col_kiri, col_kanan = st.columns([1, 2.5], gap="large")
 
@@ -188,11 +191,11 @@ if menu == "📡 Live Radar":
         st.markdown('<div class="panel-kiri">', unsafe_allow_html=True)
         st.markdown(f"### 📡 Live Engine\n<span style='font-size:12px; color:#00cc96;'>{engine_status}</span>", unsafe_allow_html=True)
         st.write("")
-        st.caption("Input terbaru otomatis nangkring paling atas secara instan.")
+        st.caption("Input bursa terbaru otomatis nangkring paling atas saat ini juga secara instan.")
         st.divider()
         st.markdown(f"""
         <div style='font-size:12px; color:#8a92b2;'>
-            <div style='display:flex; justify-content:space-between;'><span>Status Server:</span> <span style='color:#00cc96;'>✅ Online</span></div>
+            <div style='display:flex; justify-content:space-between;'><span>Status Server:</span> <span style='color:#00cc96;'>✅ Terhubung</span></div>
             <div style='display:flex; justify-content:space-between;'><span>Total Hari Ini:</span> <span style='color:#3b82f6;'>{len(df_live) if not df_live.empty else 0} Sinyal</span></div>
         </div>
         """, unsafe_allow_html=True)
@@ -200,9 +203,10 @@ if menu == "📡 Live Radar":
 
     with col_kanan:
         st.markdown("### 📡 Radar & Rekomendasi AI")
-        if df_live.empty: st.info("✅ Menunggu sinyal bursa pertama masuk...")
+        if df_live.empty: 
+            st.info("✅ Menunggu sinyal bursa pertama masuk...")
         else:
-            # Urutan terbaru otomatis paling atas
+            # Urutan terbaru melesat ke atas otomatis (Top Feed)
             df_live_reversed = df_live.iloc[::-1]
             tickers_terbaru = df_live_reversed['Ticker'].drop_duplicates().tolist()
             
@@ -238,11 +242,11 @@ if menu == "📡 Live Radar":
                     </div>
                     <div><div class="pl-amount" style="color:white;">Entry: Rp {int(last_price)}</div></div>
                 </div>""", unsafe_allow_html=True)
-    time.sleep(1) # Refresh super ngebut tiap 1 detik karena Redis enteng banget!
+    time.sleep(1) 
     st.rerun()
 
 # ==========================================
-# TAB MANUAL & EOD (SAMA SEPERTI SEBELUMNYA)
+# TAB MANUAL & EOD (PERMANENT STORAGE MODE)
 # ==========================================
 elif menu == "📋 Evaluator Manual":
     col_in, col_out = st.columns([1, 2.5], gap="large")
@@ -264,11 +268,4 @@ elif menu == "📋 Evaluator Manual":
             matches = re.findall(r'\b([A-Z]{4})\b[\s|]+(\d+)', st.session_state['manual_txt'])
             if matches:
                 st.success(f"✅ Berhasil mendeteksi {len(matches)} saham.")
-                data_sim = [{"No": i+1, "Ticker": m[0], "Algo": algo_name, "Harga Entry": int(m[1]), "Status": "RUNNING"} for i, m in enumerate(matches) if m[0] not in ['NAMA', 'DATA', 'HARG']]
-                st.dataframe(pd.DataFrame(data_sim), use_container_width=True, hide_index=True)
-        else: st.info("👈 Silakan tempel teks sinyal dari Telegram.")
-
-elif menu == "🏆 Evaluator EOD" and not st.session_state['eod_mentah'].empty:
-    if st.session_state['eod_hasil'] is None:
-        # Panggil fungsi olah EOD lu
-        pass
+                data_sim = [{"No": i+1, "Ticker": m[0], "Algo": algo_name, "Harga Entry": int(m[1]), "Status": "RUNNING"} for i,
