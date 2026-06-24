@@ -149,7 +149,7 @@ def parse_idx_data(file):
     except: return {}
 
 # --- 3. MENU UTAMA ---
-st.markdown("<h2 style='text-align: center;'>⚙️ Capelang Algo App <span style='font-size:16px; color:#8a92b2;'>v9.3 (Bulk Upload Edition)</span></h2>", unsafe_allow_html=True)
+st.markdown("<h2 style='text-align: center;'>⚙️ Capelang Algo App <span style='font-size:16px; color:#8a92b2;'>v9.5 (Full Combo + Avoid Trap)</span></h2>", unsafe_allow_html=True)
 menu = st.radio("Mode:", ["📡 Live Radar", "📋 Evaluator Manual", "🏆 Evaluator EOD"], horizontal=True, label_visibility="collapsed")
 st.divider()
 
@@ -188,7 +188,7 @@ if menu == "📡 Live Radar":
         st.markdown('<div class="panel-kiri">', unsafe_allow_html=True)
         st.markdown(f"### 📡 Live Engine\n<span style='font-size:12px; color:#00cc96;'>{engine_status}</span>", unsafe_allow_html=True)
         st.write("")
-        st.caption("AI otomatis merakit 30 balok Lego menjadi strategi Combo mematikan.")
+        st.caption("Resep Combo V9.5 dengan Sistem Filter AVOID.")
         st.divider()
         st.markdown(f"""
         <div style='font-size:12px; color:#8a92b2;'>
@@ -199,7 +199,7 @@ if menu == "📡 Live Radar":
         st.markdown('</div>', unsafe_allow_html=True)
 
     with col_kanan:
-        st.markdown("### 📡 Radar Rakitan Lego AI")
+        st.markdown("### 📡 Radar Rekomendasi AI")
         if df_live.empty: 
             st.info("✅ Menunggu balok sinyal pertama masuk...")
         else:
@@ -221,40 +221,41 @@ if menu == "📡 Live Radar":
                 css_class, badge_class = "wait", "orange"
                 
                 # ==============================================================
-                # 🧬 RESEP COMBO LEGO V9.2 (Berdasarkan 30 Title Paten Lu)
+                # 🧬 6 RESEP COMBO LEGO V9.5 (TERMASUK AVOID TRAP)
                 # ==============================================================
                 
-                # 🚨 TAMENG PELINDUNG: ALARM GUYURAN BANDAR
-                if "AWAS_Guyuran_HAKI" in list_balok:
-                    status_text = f"🚨 AWAS GUYURAN BANDAR! ({jumlah_balok} Balok)"; css_class, badge_class = "sell", "red"
+                # 🚨 RESEP AVOID: PISAU JATUH / FAKE PULLBACK (Ritel Nyangkut)
+                if "merah dihaka" in list_balok and not any(x in list_balok for x in ["14_Serok_Harga_Merah_Berbalik", "Rebound botbox", "Pantulan Cepat Pagi", "Kawal Atas VWAP", "Smart Money Akumulasi"]):
+                    status_text = f"⚠️ AVOID: PISAU JATUH (Jebakan Ritel!)"; css_class, badge_class = "sell", "red"
+
+                # 🔥 RESEP 1: COMBO DEWA CUAN 24% (Strong Buy)
+                elif "Open=Low" in list_balok and any(x in list_balok for x in ["TR_Super_Bullish", "GC MA Cleanmoney", "Momentum Bandar Rasio"]):
+                    status_text = f"🔥 STRONG BUY: COMBO DEWA ({jumlah_balok} Balok!)"; css_class, badge_class = "naga", "pink"
                 
-                # RESEP 1: COMBO NAGA COPET (HAKA Deras + Volume Agresif Pagi)
-                elif "HAKA Deras" in list_balok and any(x in list_balok for x in ["Spike Vol sesi 1", "Sesi Pagi Agresif", "VL_Pagi_Agresif", "Ledakan Vol ma20"]):
-                    status_text = f"🔥 COMBO NAGA COPET ({jumlah_balok} Balok!)"; css_class, badge_class = "naga", "pink"
-                
-                # RESEP 2: OPEN LOW UPTREND REBORN (O=L + Indikator Uptrend)
-                elif "Open=Low" in list_balok and any(x in list_balok for x in ["Strong Uptrend", "TR_Uptrend_Aktif", "TR_Super_Bullish", "Uptrend Kuat Bandar RLA 1"]):
-                    status_text = f"💎 OPEN LOW UPTREND ({jumlah_balok} Balok)"; css_class, badge_class = "buy", "green"
+                # 🚀 RESEP 2: TREND NGEGAS (Scalping/Copet Kilat)
+                elif "MO_Trend_Ngegas_ADX" in list_balok and any(x in list_balok for x in ["Ledakan Vol ma20", "MO_Momentum_Sehat", "Cross Up VWAP"]):
+                    status_text = f"🚀 BUY: TREND NGEGAS ({jumlah_balok} Balok)"; css_class, badge_class = "buy", "green"
                     
-                # RESEP 3: SEROK MERAH BERBALIK REBORN (Merah dihaka + Pantulan/Bandar Serok)
-                elif any(x in list_balok for x in ["merah dihaka", "MF_Bandar_Serok"]) and any(x in list_balok for x in ["Rebound botbox", "Bullish Engulfing", "Cross Up VWAP"]):
-                    status_text = f"🎣 SEROK MERAH BERBALIK ({jumlah_balok} Balok)"; css_class, badge_class = "buy", "green"
+                # 🎣 RESEP 3: LEGENDA LAMA BANGKIT (Serok Bawah Berbalik)
+                elif any(x in list_balok for x in ["14_Serok_Harga_Merah_Berbalik", "MF_Bandar_Serok"]) and any(x in list_balok for x in ["Pantulan Cepat Pagi", "Rebound botbox", "Kawal Atas VWAP"]):
+                    status_text = f"🎣 BUY: SEROK BAWAH ({jumlah_balok} Balok)"; css_class, badge_class = "buy", "green"
 
-                # RESEP 4: UPTREND KUAT BANDAR REBORN (Uptrend + Uang Bandar Masuk Besar)
-                elif "Uptrend Kuat Bandar RLA 1" in list_balok or ("Strong Uptrend" in list_balok and any(x in list_balok for x in ["Smart Money Akumulasi", "Clean Money Kuat", "Momentum Bandar Rasio", "GC MA Cleanmoney", "MF_Uang_Masuk_500Jt"])):
-                    status_text = f"🚀 UPTREND KUAT BANDAR ({jumlah_balok} Balok)"; css_class, badge_class = "buy", "green"
+                # 🛍️ RESEP 4: BREAKOUT / KONSOLIDASI (BSJP / Swing Pendek)
+                elif any(x in list_balok for x in ["Konsolidasi Sehat Siang", "Persiapan Tembus Siang"]) and any(x in list_balok for x in ["Breakout Penutupan", "Value Transaksi Besar", "Gap Up Lanjut Naik"]):
+                    status_text = f"🛍️ BUY: BREAKOUT SIANG ({jumlah_balok} Balok)"; css_class, badge_class = "buy", "green"
 
-                # RESEP 5: BREAKOUT SORE / BSJP (Tembus Atap/High)
-                elif any(x in list_balok for x in ["Breakout Penutupan", "Breakout High H-1"]) and "Value Transaksi Besar" in list_balok:
-                    status_text = f"🛍️ BREAKOUT / POTENSI BSJP ({jumlah_balok} Balok)"; css_class, badge_class = "buy", "green"
+                # 💎 RESEP 5: AKUMULASI BANDAR (Cocok buat hold 2-3 hari)
+                elif any(x in list_balok for x in ["Smart Money Akumulasi", "Clean Money Kuat"]) and any(x in list_balok for x in ["Uptrend Kuat Bandar RLA 1", "TR_Uptrend_Aktif", "TR_Super_Bullish"]):
+                    status_text = f"💎 BUY: AKUMULASI BANDAR ({jumlah_balok} Balok)"; css_class, badge_class = "buy", "green"
 
-                # JIKA BALOK BARU 1 ATAU 2 TAPI BELUM COCOK RESEP (DAN BUKAN HAKI)
+                # ⚙️ MERAKIT COMBO (Lebih dari 2 Balok tapi belum masuk resep di atas)
                 elif jumlah_balok >= 2:
-                    status_text = f"⚙️ MERAKIT COMBO ({jumlah_balok} Balok)"; css_class, badge_class = "buy", "green"
+                    status_text = f"⚙️ MERAKIT COMBO ({jumlah_balok} Balok)"; css_class, badge_class = "wait", "orange"
+                
+                # 🧱 WAIT (Balok Tunggal)
                 else:
                     status_text = "🧱 WAIT (Cuma 1 Balok)"; css_class, badge_class = "wait", "orange"
 
-                # Tampilan UI
                 gabungan_balok = " + ".join(list_balok)
                 st.markdown(f"""
                 <div class="trade-card {css_class}">
@@ -290,17 +291,7 @@ elif menu == "📋 Evaluator Manual":
             matches = re.findall(r'\b([A-Z]{4})\b[\s|]+(\d+)', st.session_state['manual_txt'])
             if matches:
                 st.success(f"✅ Berhasil mendeteksi {len(matches)} saham.")
-                data_sim = [
-                    {
-                        "No": i+1, 
-                        "Ticker": m[0], 
-                        "Algo": algo_name, 
-                        "Harga Entry": int(m[1]), 
-                        "Status": "RUNNING"
-                    } 
-                    for i, m in enumerate(matches) 
-                    if m[0] not in ['NAMA', 'DATA', 'HARG']
-                ]
+                data_sim = [{"No": i+1, "Ticker": m[0], "Algo": algo_name, "Harga Entry": int(m[1]), "Status": "RUNNING"} for i, m in enumerate(matches) if m[0] not in ['NAMA', 'DATA', 'HARG']]
                 st.dataframe(pd.DataFrame(data_sim), use_container_width=True, hide_index=True)
         else: st.info("👈 Silakan tempel teks sinyal dari Telegram.")
 
@@ -313,7 +304,6 @@ elif menu == "🏆 Evaluator EOD":
         st.markdown("### 1️⃣ Sumber Data Sinyal")
         sumber_sinyal = st.radio("Pilih sumber sinyal lu:", ["📂 Upload Sinyal Manual (Telegram/CSV)", "📡 Otomatis (Google Sheets)"], key="rad_sinyal")
         
-        # ⚡ NEW: Sistem Bulk Upload untuk Multi-File
         if sumber_sinyal == "📂 Upload Sinyal Manual (Telegram/CSV)":
             if st.session_state['eod_mentah'].empty:
                 files_sinyal = st.file_uploader("Upload File Sinyal (Bisa Blok Banyak File Sekaligus)", type=['csv', 'txt'], accept_multiple_files=True)
@@ -325,7 +315,6 @@ elif menu == "🏆 Evaluator EOD":
                             all_data.append(df_parsed)
                     
                     if all_data:
-                        # Gabungkan semua file jadi satu tabel raksasa
                         st.session_state['eod_mentah'] = pd.concat(all_data, ignore_index=True)
                         st.session_state['eod_hasil'] = None
                         st.rerun()
