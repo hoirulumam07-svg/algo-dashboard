@@ -149,7 +149,7 @@ def parse_idx_data(file):
     except: return {}
 
 # --- 3. MENU UTAMA ---
-st.markdown("<h2 style='text-align: center;'>⚙️ Capelang Algo App <span style='font-size:16px; color:#8a92b2;'>v9.5 (Full Combo + Avoid Trap)</span></h2>", unsafe_allow_html=True)
+st.markdown("<h2 style='text-align: center;'>⚙️ Capelang Algo App <span style='font-size:16px; color:#8a92b2;'>v9.6 (Advanced Metrics)</span></h2>", unsafe_allow_html=True)
 menu = st.radio("Mode:", ["📡 Live Radar", "📋 Evaluator Manual", "🏆 Evaluator EOD"], horizontal=True, label_visibility="collapsed")
 st.divider()
 
@@ -296,7 +296,7 @@ elif menu == "📋 Evaluator Manual":
         else: st.info("👈 Silakan tempel teks sinyal dari Telegram.")
 
 # ==========================================
-# TAB EOD (DENGAN MULTI-FILE UPLOADER)
+# TAB EOD (DENGAN MULTI-FILE & MAX PEAK METRICS)
 # ==========================================
 elif menu == "🏆 Evaluator EOD":
     col1, col2 = st.columns(2)
@@ -417,6 +417,8 @@ elif menu == "🏆 Evaluator EOD":
                     st.session_state['eod_hasil'] = None
                     st.rerun()
             if 'Algo' in df_eod.columns:
+                
+                # ⚡ NEW: Penambahan Kolom Max Potensi Cuan Tertinggi (Peak Profit)
                 algo_stats = df_eod.groupby('Algo').apply(
                     lambda x: pd.Series({
                         'Total Sinyal': len(x), 
@@ -424,9 +426,10 @@ elif menu == "🏆 Evaluator EOD":
                         'Loss (EOD)': len(x[x['Status'] == 'LOSS 🔴']), 
                         'Win Rate EOD (%)': (len(x[x['Status'] == 'WIN 🟢']) / len(x)) * 100, 
                         'Rata-rata Profit EOD (%)': x['Profit_%'].mean(),
-                        'Rata-rata Max Cuan Copet (%)': x['Max_Profit_%'].mean()
+                        'Rata-rata Max Potensi Cuan (%)': x['Max_Profit_%'].mean(),
+                        'Max Potensi Cuan Tertinggi (%)': x['Max_Profit_%'].max()
                     })
-                ).reset_index().sort_values(by=['Rata-rata Max Cuan Copet (%)', 'Win Rate EOD (%)'], ascending=[False, False])
+                ).reset_index().sort_values(by=['Rata-rata Max Potensi Cuan (%)', 'Win Rate EOD (%)'], ascending=[False, False])
                 
                 st.dataframe(
                     algo_stats.style.format({
@@ -435,7 +438,8 @@ elif menu == "🏆 Evaluator EOD":
                         'Loss (EOD)': '{:.0f}', 
                         'Win Rate EOD (%)': '{:.1f}%', 
                         'Rata-rata Profit EOD (%)': '{:+.2f}%',
-                        'Rata-rata Max Cuan Copet (%)': '{:+.2f}%'
+                        'Rata-rata Max Potensi Cuan (%)': '{:+.2f}%',
+                        'Max Potensi Cuan Tertinggi (%)': '{:+.2f}%'
                     }), 
                     use_container_width=True, 
                     hide_index=True
