@@ -149,7 +149,7 @@ def parse_idx_data(file):
     except: return {}
 
 # --- 3. MENU UTAMA ---
-st.markdown("<h2 style='text-align: center;'>⚙️ Capelang Algo App <span style='font-size:16px; color:#8a92b2;'>v9.2 (Ultimate Lego Master)</span></h2>", unsafe_allow_html=True)
+st.markdown("<h2 style='text-align: center;'>⚙️ Capelang Algo App <span style='font-size:16px; color:#8a92b2;'>v9.3 (Bulk Upload Edition)</span></h2>", unsafe_allow_html=True)
 menu = st.radio("Mode:", ["📡 Live Radar", "📋 Evaluator Manual", "🏆 Evaluator EOD"], horizontal=True, label_visibility="collapsed")
 st.divider()
 
@@ -305,20 +305,32 @@ elif menu == "📋 Evaluator Manual":
         else: st.info("👈 Silakan tempel teks sinyal dari Telegram.")
 
 # ==========================================
-# TAB EOD
+# TAB EOD (DENGAN MULTI-FILE UPLOADER)
 # ==========================================
 elif menu == "🏆 Evaluator EOD":
     col1, col2 = st.columns(2)
     with col1:
         st.markdown("### 1️⃣ Sumber Data Sinyal")
         sumber_sinyal = st.radio("Pilih sumber sinyal lu:", ["📂 Upload Sinyal Manual (Telegram/CSV)", "📡 Otomatis (Google Sheets)"], key="rad_sinyal")
+        
+        # ⚡ NEW: Sistem Bulk Upload untuk Multi-File
         if sumber_sinyal == "📂 Upload Sinyal Manual (Telegram/CSV)":
             if st.session_state['eod_mentah'].empty:
-                file_sinyal = st.file_uploader("Upload File Sinyal (TXT/CSV)", type=['csv', 'txt'])
-                if file_sinyal:
-                    st.session_state['eod_mentah'] = parse_telegram_log_bulletproof(file_sinyal)
-                    st.session_state['eod_hasil'] = None
-                    st.rerun()
+                files_sinyal = st.file_uploader("Upload File Sinyal (Bisa Blok Banyak File Sekaligus)", type=['csv', 'txt'], accept_multiple_files=True)
+                if files_sinyal:
+                    all_data = []
+                    for f in files_sinyal:
+                        df_parsed = parse_telegram_log_bulletproof(f)
+                        if not df_parsed.empty:
+                            all_data.append(df_parsed)
+                    
+                    if all_data:
+                        # Gabungkan semua file jadi satu tabel raksasa
+                        st.session_state['eod_mentah'] = pd.concat(all_data, ignore_index=True)
+                        st.session_state['eod_hasil'] = None
+                        st.rerun()
+                    else:
+                        st.warning("⚠️ Tidak ada format sinyal valid yang ditemukan di file-file tersebut.")
             else:
                 st.success(f"✅ Data Sinyal Tersimpan di Memori ({len(st.session_state['eod_mentah'])} Sinyal).")
                 if st.button("🗑️ Ganti File Sinyal"):
