@@ -45,6 +45,7 @@ st.markdown("""
     .trade-details { font-size: 12px; color: #8a92b2; margin-top: 8px; }
     .pl-amount { font-size: 16px; font-weight: bold; text-align: right; }
     div[role="radiogroup"] { justify-content: center; margin-bottom: 10px; }
+    .metric-box { background-color: #181b2f; border-radius: 8px; padding: 15px; text-align: center; border: 1px solid #2d334a; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -128,8 +129,40 @@ def parse_idx_data(file):
         else: return {}
     except: return {}
 
-st.markdown("<h2 style='text-align: center;'>⚙️ Capelang Algo App <span style='font-size:16px; color:#8a92b2;'>v10.1 (TXT Data Support)</span></h2>", unsafe_allow_html=True)
-menu = st.radio("Mode:", ["📡 Live Radar", "📋 Evaluator Manual", "🏆 Evaluator EOD"], horizontal=True, label_visibility="collapsed")
+def proses_data_eod(df, harga_idx_manual):
+    df_olah = df.copy()
+    df_olah['Price'] = pd.to_numeric(df_olah['Price'], errors='coerce')
+    df_olah = df_olah.dropna(subset=['Ticker', 'Price'])
+    tickers = df_olah['Ticker'].unique()
+    close_prices, high_prices = {}, {} 
+    
+    if len(tickers) > 0:
+        st.write("🤖 **Memproses Evaluasi End of Day & Intraday Max Profit...**")
+        progress_bar = st.progress(0)
+        for i, ticker in enumerate(tickers):
+            try:
+                data_saham = yf.Ticker(f"{ticker}.JK").history(period="5d")
+                if not data_saham.empty: yahoo_close, yahoo_high = float(data_saham['Close'].iloc[-1]), float(data_saham['High'].iloc[-1])
+                else: yahoo_close = yahoo_high = float(df_olah[df_olah['Ticker']==ticker]['Price'].iloc[-1])
+            except: yahoo_close = yahoo_high = float(df_olah[df_olah['Ticker']==ticker]['Price'].iloc[-1])
+            
+            if harga_idx_manual and ticker in harga_idx_manual:
+                close_prices[ticker] = float(harga_idx_manual[ticker])
+                high_prices[ticker] = max(yahoo_high, close_prices[ticker])
+            else:
+                close_prices[ticker], high_prices[ticker] = yahoo_close, yahoo_high
+            progress_bar.progress((i + 1) / len(tickers))
+        progress_bar.empty()
+        
+    df_olah['EOD_Close'] = df_olah['Ticker'].map(close_prices)
+    df_olah['Max_High'] = df_olah['Ticker'].map(high_prices)
+    df_olah['Profit_%'] = ((df_olah['EOD_Close'] - df_olah['Price']) / df_olah['Price']) * 100
+    df_olah['Max_Profit_%'] = ((df_olah['Max_High'] - df_olah['Price']) / df_olah['Price']) * 100
+    df_olah['Status'] = df_olah['Profit_%'].apply(lambda x: 'WIN 🟢' if x > 0 else ('LOSS 🔴' if x < 0 else 'BEP ⚪'))
+    return df_olah
+
+st.markdown("<h2 style='text-align: center;'>⚙️ Capelang Algo App <span style='font-size:16px; color:#8a92b2;'>v10.2 (Porto Simulator)</span></h2>", unsafe_allow_html=True)
+menu = st.radio("Mode:", ["📡 Live Radar", "📋 Evaluator Manual", "🏆 Evaluator EOD", "💼 Simulator Portofolio"], horizontal=True, label_visibility="collapsed")
 st.divider()
 
 if menu == "📡 Live Radar":
@@ -194,6 +227,8 @@ if menu == "📡 Live Radar":
                     status_text = f"🎣 BUY: SEROK BAWAH ({jumlah_balok} Balok)"; css_class, badge_class = "buy", "green"
                 elif any(x in list_balok for x in ["Konsolidasi Sehat Siang", "Breakout Siang Valid"]) and any(x in list_balok for x in ["Breakout Penutupan", "Value Transaksi Besar", "Gap Up Lanjut Naik"]):
                     status_text = f"🛍️ BUY: BREAKOUT SIANG ({jumlah_balok} Balok)"; css_class, badge_class = "buy", "green"
+                elif any(x in list_balok for x in ["Smart Money Akumulasi", "Clean Money Kuat"]) and any(x in list_balok for x in ["Uptrend Kuat Bandar RLA 1", "TR_Uptrend_Aktif", "TR_Super_Bullish"]):
+                    status_text = f"💎 BUY: AKUMULASI BANDAR ({jumlah_balok} Balok)"; css_class, badge_class = "buy", "green"
                 elif jumlah_balok >= 2: status_text = f"⚙️ MERAKIT COMBO ({jumlah_balok} Balok)"; css_class, badge_class = "wait", "orange"
                 else: status_text = "🧱 WAIT (Cuma 1 Balok)"; css_class, badge_class = "wait", "orange"
 
@@ -226,7 +261,7 @@ elif menu == "📋 Evaluator Manual":
                 st.dataframe(pd.DataFrame(data_sim), use_container_width=True, hide_index=True)
         else: st.info("👈 Silakan tempel teks sinyal dari Telegram.")
 
-elif menu == "🏆 Evaluator EOD":
+elif menu in ["🏆 Evaluator EOD", "💼 Simulator Portofolio"]:
     col1, col2 = st.columns(2)
     with col1:
         st.markdown("### 1️⃣ Sumber Data Sinyal")
@@ -250,7 +285,6 @@ elif menu == "🏆 Evaluator EOD":
 
     with col2:
         st.markdown("### 2️⃣ Sumber Harga EOD (Penutupan)")
-        # ⚡ NEW: .txt ditambahkan di menu radio dan uploader
         sumber_eod = st.radio("Pilih sumber harga EOD lu:", ["📊 Upload Data Resmi IDX (.xls/.xlsx/.csv/.txt)", "📡 Otomatis (Yahoo Finance)"], key="rad_eod")
         if sumber_eod == "📊 Upload Data Resmi IDX (.xls/.xlsx/.csv/.txt)":
             if not st.session_state['eod_idx']:
@@ -265,67 +299,91 @@ elif menu == "🏆 Evaluator EOD":
 
     st.divider()
 
-    def proses_data_eod(df, harga_idx_manual):
-        df_olah = df.copy()
-        df_olah['Price'] = pd.to_numeric(df_olah['Price'], errors='coerce')
-        df_olah = df_olah.dropna(subset=['Ticker', 'Price'])
-        tickers = df_olah['Ticker'].unique()
-        close_prices, high_prices = {}, {} 
-        
-        if len(tickers) > 0:
-            st.write("🤖 **Memproses Evaluasi End of Day & Intraday Max Profit...**")
-            progress_bar = st.progress(0)
-            for i, ticker in enumerate(tickers):
-                try:
-                    data_saham = yf.Ticker(f"{ticker}.JK").history(period="5d")
-                    if not data_saham.empty: yahoo_close, yahoo_high = float(data_saham['Close'].iloc[-1]), float(data_saham['High'].iloc[-1])
-                    else: yahoo_close = yahoo_high = float(df_olah[df_olah['Ticker']==ticker]['Price'].iloc[-1])
-                except: yahoo_close = yahoo_high = float(df_olah[df_olah['Ticker']==ticker]['Price'].iloc[-1])
-                
-                if harga_idx_manual and ticker in harga_idx_manual:
-                    close_prices[ticker] = float(harga_idx_manual[ticker])
-                    high_prices[ticker] = max(yahoo_high, close_prices[ticker])
-                else:
-                    close_prices[ticker], high_prices[ticker] = yahoo_close, yahoo_high
-                progress_bar.progress((i + 1) / len(tickers))
-            progress_bar.empty()
-            
-        df_olah['EOD_Close'] = df_olah['Ticker'].map(close_prices)
-        df_olah['Max_High'] = df_olah['Ticker'].map(high_prices)
-        df_olah['Profit_%'] = ((df_olah['EOD_Close'] - df_olah['Price']) / df_olah['Price']) * 100
-        df_olah['Max_Profit_%'] = ((df_olah['Max_High'] - df_olah['Price']) / df_olah['Price']) * 100
-        df_olah['Status'] = df_olah['Profit_%'].apply(lambda x: 'WIN 🟢' if x > 0 else ('LOSS 🔴' if x < 0 else 'BEP ⚪'))
-        return df_olah
-
     if not st.session_state['eod_mentah'].empty:
         if st.session_state['eod_hasil'] is None: st.session_state['eod_hasil'] = proses_data_eod(st.session_state['eod_mentah'], st.session_state['eod_idx'])
         df_eod = st.session_state['eod_hasil']
         
         if not df_eod.empty:
-            col_head1, col_head2 = st.columns([4, 1])
-            with col_head1: st.subheader("🔥 Ranking Performa Lego Hari Ini")
-            with col_head2:
-                if st.button("🔄 Hitung Ulang", use_container_width=True): st.session_state['eod_hasil'] = None; st.rerun()
-            if 'Algo' in df_eod.columns:
-                algo_stats = df_eod.groupby('Algo').apply(
-                    lambda x: pd.Series({
-                        'Total Sinyal': len(x), 'Win (EOD)': len(x[x['Status'] == 'WIN 🟢']), 'Loss (EOD)': len(x[x['Status'] == 'LOSS 🔴']), 
-                        'Win Rate EOD (%)': (len(x[x['Status'] == 'WIN 🟢']) / len(x)) * 100, 'Rata-rata Profit EOD (%)': x['Profit_%'].mean(),
-                        'Rata-rata Max Potensi Cuan (%)': x['Max_Profit_%'].mean(), 'Max Potensi Cuan Tertinggi (%)': x['Max_Profit_%'].max()
-                    })
-                ).reset_index().sort_values(by=['Rata-rata Max Potensi Cuan (%)', 'Win Rate EOD (%)'], ascending=[False, False])
-                st.dataframe(algo_stats.style.format({'Total Sinyal': '{:.0f}', 'Win (EOD)': '{:.0f}', 'Loss (EOD)': '{:.0f}', 'Win Rate EOD (%)': '{:.1f}%', 'Rata-rata Profit EOD (%)': '{:+.2f}%', 'Rata-rata Max Potensi Cuan (%)': '{:+.2f}%', 'Max Potensi Cuan Tertinggi (%)': '{:+.2f}%'}), use_container_width=True, hide_index=True)
+            if menu == "🏆 Evaluator EOD":
+                col_head1, col_head2 = st.columns([4, 1])
+                with col_head1: st.subheader("🔥 Ranking Performa Lego Hari Ini")
+                with col_head2:
+                    if st.button("🔄 Hitung Ulang", use_container_width=True): st.session_state['eod_hasil'] = None; st.rerun()
+                if 'Algo' in df_eod.columns:
+                    algo_stats = df_eod.groupby('Algo').apply(
+                        lambda x: pd.Series({
+                            'Total Sinyal': len(x), 'Win (EOD)': len(x[x['Status'] == 'WIN 🟢']), 'Loss (EOD)': len(x[x['Status'] == 'LOSS 🔴']), 
+                            'Win Rate EOD (%)': (len(x[x['Status'] == 'WIN 🟢']) / len(x)) * 100, 'Rata-rata Profit EOD (%)': x['Profit_%'].mean(),
+                            'Rata-rata Max Potensi Cuan (%)': x['Max_Profit_%'].mean(), 'Max Potensi Cuan Tertinggi (%)': x['Max_Profit_%'].max()
+                        })
+                    ).reset_index().sort_values(by=['Rata-rata Max Potensi Cuan (%)', 'Win Rate EOD (%)'], ascending=[False, False])
+                    st.dataframe(algo_stats.style.format({'Total Sinyal': '{:.0f}', 'Win (EOD)': '{:.0f}', 'Loss (EOD)': '{:.0f}', 'Win Rate EOD (%)': '{:.1f}%', 'Rata-rata Profit EOD (%)': '{:+.2f}%', 'Rata-rata Max Potensi Cuan (%)': '{:+.2f}%', 'Max Potensi Cuan Tertinggi (%)': '{:+.2f}%'}), use_container_width=True, hide_index=True)
+                
+                st.divider()
+                st.subheader("🧬 Saham dengan Rakitan Combo Lego")
+                if 'Algo' in df_eod.columns:
+                    combo_data = df_eod.groupby('Ticker').apply(
+                        lambda x: pd.Series({
+                            'Jumlah Balok': len(x['Algo'].unique()), 'Komponen Balok Lego': " + ".join(x['Algo'].unique()), 
+                            'Harga Entry': x['Price'].iloc[0], 'Harga Puncak (High)': x['Max_High'].iloc[0], 'Harga Penutupan (EOD)': x['EOD_Close'].iloc[0], 
+                            'Max Potensi Cuan (%)': x['Max_Profit_%'].iloc[0], 'Profit EOD (%)': x['Profit_%'].iloc[0], 'Hasil Akhir': x['Status'].iloc[0]
+                        })
+                    ).reset_index()
+                    combo_data_only = combo_data[combo_data['Jumlah Balok'] > 1].sort_values(by='Max Potensi Cuan (%)', ascending=False)
+                    if not combo_data_only.empty: st.dataframe(combo_data_only.style.format({'Harga Entry': '{:.0f}', 'Harga Puncak (High)': '{:.0f}', 'Harga Penutupan (EOD)': '{:.0f}', 'Max Potensi Cuan (%)': '{:+.2f}%', 'Profit EOD (%)': '{:+.2f}%'}), use_container_width=True, hide_index=True)
+                    else: st.info("Tidak ada saham yang berhasil merakit Combo Lego di data ini.")
             
-            st.divider()
-            st.subheader("🧬 Saham dengan Rakitan Combo Lego")
-            if 'Algo' in df_eod.columns:
-                combo_data = df_eod.groupby('Ticker').apply(
+            elif menu == "💼 Simulator Portofolio":
+                def cek_sinyal_buy(algos):
+                    list_b = list(set(algos))
+                    if "merah dihaka" in list_b and not any(x in list_b for x in ["14_Serok_Harga_Merah_Berbalik", "Rebound botbox", "Pantulan Cepat Pagi", "Kawal Atas VWAP", "Smart Money Akumulasi"]): return "AVOID"
+                    if any(x in list_b for x in ["MO_Trend_Ngegas_ADX", "MF_RMF_Kuat"]) and any(x in list_b for x in ["TR_Super_Bullish", "Momentum Bandar Rasio"]) and any(x in list_b for x in ["MO_Speed_Cepat", "Cross Up VWAP"]): return "NAGA BANGKIT"
+                    if "Pantulan Cepat Pagi" in list_b and "Rebound botbox" in list_b and "Cross Up VWAP" in list_b: return "V-SHAPE REVERSAL"
+                    if "Cross Up VWAP" in list_b and "GC MA Cleanmoney" in list_b and any(x in list_b for x in ["Breakout Siang Valid", "Ledakan Vol ma20", "Pantulan Cepat Pagi"]): return "TEMBUS VWAP"
+                    if any(x in list_b for x in ["14_Serok_Harga_Merah_Berbalik", "MF_Bandar_Serok"]) and any(x in list_b for x in ["Pantulan Cepat Pagi", "Rebound botbox", "Kawal Atas VWAP"]): return "SEROK BAWAH"
+                    if any(x in list_b for x in ["Konsolidasi Sehat Siang", "Breakout Siang Valid"]) and any(x in list_b for x in ["Breakout Penutupan", "Value Transaksi Besar", "Gap Up Lanjut Naik"]): return "BREAKOUT SIANG"
+                    if any(x in list_b for x in ["Smart Money Akumulasi", "Clean Money Kuat"]) and any(x in list_b for x in ["Uptrend Kuat Bandar RLA 1", "TR_Uptrend_Aktif", "TR_Super_Bullish"]): return "AKUMULASI BANDAR"
+                    return "WAIT"
+
+                sim_data = df_eod.groupby('Ticker').apply(
                     lambda x: pd.Series({
-                        'Jumlah Balok': len(x['Algo'].unique()), 'Komponen Balok Lego': " + ".join(x['Algo'].unique()), 
-                        'Harga Entry': x['Price'].iloc[0], 'Harga Puncak (High)': x['Max_High'].iloc[0], 'Harga Penutupan (EOD)': x['EOD_Close'].iloc[0], 
-                        'Max Potensi Cuan (%)': x['Max_Profit_%'].iloc[0], 'Profit EOD (%)': x['Profit_%'].iloc[0], 'Hasil Akhir': x['Status'].iloc[0]
+                        'Sinyal AI': cek_sinyal_buy(x['Algo'].tolist()), 'Harga Entry': x['Price'].iloc[0], 'Harga EOD': x['EOD_Close'].iloc[0],
+                        'Max High': x['Max_High'].iloc[0], 'Profit (%)': x['Profit_%'].iloc[0], 'Status': x['Status'].iloc[0]
                     })
                 ).reset_index()
-                combo_data_only = combo_data[combo_data['Jumlah Balok'] > 1].sort_values(by='Max Potensi Cuan (%)', ascending=False)
-                if not combo_data_only.empty: st.dataframe(combo_data_only.style.format({'Harga Entry': '{:.0f}', 'Harga Puncak (High)': '{:.0f}', 'Harga Penutupan (EOD)': '{:.0f}', 'Max Potensi Cuan (%)': '{:+.2f}%', 'Profit EOD (%)': '{:+.2f}%'}), use_container_width=True, hide_index=True)
-                else: st.info("Tidak ada saham yang berhasil merakit Combo Lego di data ini.")
+
+                buy_trades = sim_data[sim_data['Sinyal AI'].isin(["NAGA BANGKIT", "V-SHAPE REVERSAL", "TEMBUS VWAP", "SEROK BAWAH", "BREAKOUT SIANG", "AKUMULASI BANDAR"])].copy()
+
+                if not buy_trades.empty:
+                    MODAL_AWAL = 500000000
+                    ALOKASI_PER_TRADE = 10000000
+
+                    buy_trades['Lot'] = (ALOKASI_PER_TRADE // buy_trades['Harga Entry']) // 100
+                    buy_trades['Modal Terpakai'] = buy_trades['Lot'] * 100 * buy_trades['Harga Entry']
+                    buy_trades['PnL (Rp)'] = buy_trades['Lot'] * 100 * (buy_trades['Harga EOD'] - buy_trades['Harga Entry'])
+                    
+                    total_terpakai = buy_trades['Modal Terpakai'].sum()
+                    total_pnl = buy_trades['PnL (Rp)'].sum()
+                    saldo_akhir = MODAL_AWAL + total_pnl
+                    win_trades = len(buy_trades[buy_trades['PnL (Rp)'] > 0])
+                    win_rate = (win_trades / len(buy_trades)) * 100
+
+                    st.subheader("💼 Simulator Portofolio AI Capelang")
+                    st.caption("Asumsi: Modal Awal Rp 500 Juta | Pembelian Rp 10 Juta per Emiten (Sesuai Resep Combo Live Radar)")
+                    
+                    c1, c2, c3, c4 = st.columns(4)
+                    c1.markdown(f"<div class='metric-box'><h5 style='color:#8a92b2; margin:0;'>Modal Awal</h5><h3 style='margin:0; color:#00cc96;'>Rp {MODAL_AWAL:,.0f}</h3></div>", unsafe_allow_html=True)
+                    c2.markdown(f"<div class='metric-box'><h5 style='color:#8a92b2; margin:0;'>Modal Terpakai (Buy Sinyal)</h5><h3 style='margin:0; color:#3b82f6;'>Rp {total_terpakai:,.0f}</h3></div>", unsafe_allow_html=True)
+                    warna_pnl = "#00cc96" if total_pnl > 0 else "#ff4b4b"
+                    c3.markdown(f"<div class='metric-box'><h5 style='color:#8a92b2; margin:0;'>Total Profit/Loss EOD</h5><h3 style='margin:0; color:{warna_pnl};'>Rp {total_pnl:,.0f}</h3></div>", unsafe_allow_html=True)
+                    c4.markdown(f"<div class='metric-box'><h5 style='color:#8a92b2; margin:0;'>Win Rate Trade</h5><h3 style='margin:0; color:#ff00ff;'>{win_rate:.1f}%</h3><p style='margin:0; font-size:12px; color:#8a92b2;'>({win_trades} Win dari {len(buy_trades)} Emiten)</p></div>", unsafe_allow_html=True)
+                    
+                    st.write("")
+                    st.markdown("##### 📝 Histori Sinyal Eksekusi BUY")
+                    display_df = buy_trades[['Ticker', 'Sinyal AI', 'Lot', 'Harga Entry', 'Harga EOD', 'Max High', 'Modal Terpakai', 'PnL (Rp)', 'Profit (%)', 'Status']]
+                    st.dataframe(display_df.style.format({
+                        'Lot': '{:.0f}', 'Harga Entry': 'Rp {:,.0f}', 'Harga EOD': 'Rp {:,.0f}', 'Max High': 'Rp {:,.0f}', 
+                        'Modal Terpakai': 'Rp {:,.0f}', 'PnL (Rp)': 'Rp {:,.0f}', 'Profit (%)': '{:+.2f}%'
+                    }).map(lambda x: 'color: #00cc96;' if x == 'WIN 🟢' else ('color: #ff4b4b;' if x == 'LOSS 🔴' else ''), subset=['Status']), use_container_width=True, hide_index=True)
+                else:
+                    st.info("⚠️ Tidak ada sinyal BUY valid (Resep Combo) yang dihasilkan dari data ini.")
