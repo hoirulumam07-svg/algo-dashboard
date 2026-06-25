@@ -149,7 +149,7 @@ def parse_idx_data(file):
     except: return {}
 
 # --- 3. MENU UTAMA ---
-st.markdown("<h2 style='text-align: center;'>⚙️ Capelang Algo App <span style='font-size:16px; color:#8a92b2;'>v9.6 (Advanced Metrics)</span></h2>", unsafe_allow_html=True)
+st.markdown("<h2 style='text-align: center;'>⚙️ Capelang Algo App <span style='font-size:16px; color:#8a92b2;'>v9.7 (Auto-Flush Edition)</span></h2>", unsafe_allow_html=True)
 menu = st.radio("Mode:", ["📡 Live Radar", "📋 Evaluator Manual", "🏆 Evaluator EOD"], horizontal=True, label_visibility="collapsed")
 st.divider()
 
@@ -193,9 +193,19 @@ if menu == "📡 Live Radar":
         st.markdown(f"""
         <div style='font-size:12px; color:#8a92b2;'>
             <div style='display:flex; justify-content:space-between;'><span>Status Server:</span> <span style='color:#00cc96;'>✅ Terhubung</span></div>
-            <div style='display:flex; justify-content:space-between;'><span>Total Balok Hari Ini:</span> <span style='color:#3b82f6;'>{len(df_live) if not df_live.empty else 0} Balok</span></div>
+            <div style='display:flex; justify-content:space-between;'><span>Total Balok Saat Ini:</span> <span style='color:#3b82f6;'>{len(df_live) if not df_live.empty else 0} Balok</span></div>
         </div>
         """, unsafe_allow_html=True)
+        
+        # ⚡ NEW: TOMBOL FLUSH REDIS (Kuras Data Kemarin)
+        st.write("")
+        if st.button("🧹 Bersihkan Radar (Mulai Hari Baru)", use_container_width=True):
+            if r_client:
+                r_client.delete("live_signals") # Ini perintah mutlak buat ngebuang seluruh isi brankas Redis lu
+                st.rerun()
+            else:
+                st.error("⚠️ Koneksi Redis terputus, gagal membersihkan.")
+                
         st.markdown('</div>', unsafe_allow_html=True)
 
     with col_kanan:
@@ -417,8 +427,6 @@ elif menu == "🏆 Evaluator EOD":
                     st.session_state['eod_hasil'] = None
                     st.rerun()
             if 'Algo' in df_eod.columns:
-                
-                # ⚡ NEW: Penambahan Kolom Max Potensi Cuan Tertinggi (Peak Profit)
                 algo_stats = df_eod.groupby('Algo').apply(
                     lambda x: pd.Series({
                         'Total Sinyal': len(x), 
