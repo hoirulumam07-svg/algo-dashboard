@@ -6,32 +6,22 @@ import re
 import io
 import redis
 
-# --- 1. SETUP HALAMAN & TEMA ---
 st.set_page_config(page_title="Capelang Algo App", layout="wide")
 
-# ==========================================
-# 🛰️ KONEKSI LIVE REAL-TIME RADAR (REDIS)
-# ==========================================
 REDIS_URL = "rediss://default:gQAAAAAAAXJKAAIgcDJmMGY1OGMyYWE2ZDM0NWMzODA1YTAxMDFmMTE4Yzk4ZQ@engaged-tapir-94794.upstash.io:6379"
 
 @st.cache_resource
 def get_redis_client():
-    try:
-        return redis.Redis.from_url(REDIS_URL, decode_responses=True, socket_timeout=5)
-    except:
-        return None
+    try: return redis.Redis.from_url(REDIS_URL, decode_responses=True, socket_timeout=5)
+    except: return None
 
 r_client = get_redis_client()
 
-# ==========================================
-# 🧠 BRANKAS MEMORI AI (SESSION STATE)
-# ==========================================
 if 'manual_txt' not in st.session_state: st.session_state['manual_txt'] = ""
 if 'eod_mentah' not in st.session_state: st.session_state['eod_mentah'] = pd.DataFrame()
 if 'eod_idx' not in st.session_state: st.session_state['eod_idx'] = {}
 if 'eod_hasil' not in st.session_state: st.session_state['eod_hasil'] = None
 
-# --- 2. INJEKSI CSS CUSTOM (UI Dark Mode) ---
 st.markdown("""
     <style>
     .stApp { background-color: #111526; color: white; }
@@ -60,7 +50,6 @@ st.markdown("""
 
 SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSiHk0WKndyGH-uOKzKmr0L5sE8a4d7H80msQTq-cL-EwShOjbE3xl5D01Isd0OdqufAbNl7CGx7qL-/pub?gid=0&single=true&output=csv"
 
-# --- FUNGSI ALAT BACA ---
 def standarisasi_kolom(df):
     col_rename = {}
     for col in df.columns:
@@ -98,9 +87,7 @@ def parse_idx_data(file):
     try:
         file_bytes = file.read()
         df_raw = None
-        try:
-            dfs = pd.read_html(io.BytesIO(file_bytes))
-            if dfs: df_raw = dfs[0]
+        try: dfs = pd.read_html(io.BytesIO(file_bytes)); df_raw = dfs[0] if dfs else None
         except: pass
         if df_raw is None or df_raw.empty:
             try: df_raw = pd.read_excel(io.BytesIO(file_bytes), engine='openpyxl')
@@ -116,19 +103,14 @@ def parse_idx_data(file):
         header_idx = -1
         col_str = " ".join(str(c).lower() for c in df_raw.columns)
         if any(k in col_str for k in ['kode', 'code', 'ticker']) and any(k in col_str for k in ['close', 'penutupan', 'akhir', 'last']):
-            header_idx = -2 
-            df = df_raw.copy()
+            header_idx = -2; df = df_raw.copy()
         else:
             for i in range(min(20, len(df_raw))):
                 row_str = " ".join(str(x).lower() for x in df_raw.iloc[i].values)
                 if any(k in row_str for k in ['kode', 'code', 'ticker']) and any(k in row_str for k in ['close', 'penutupan', 'akhir', 'last']):
-                    header_idx = i
-                    break
-            if header_idx >= 0:
-                df = df_raw.iloc[header_idx+1:].copy()
-                df.columns = df_raw.iloc[header_idx]
-            else:
-                df = df_raw.copy()
+                    header_idx = i; break
+            if header_idx >= 0: df = df_raw.iloc[header_idx+1:].copy(); df.columns = df_raw.iloc[header_idx]
+            else: df = df_raw.copy()
 
         df.columns = df.columns.astype(str).str.strip().str.lower()
         col_map = {}
@@ -141,21 +123,15 @@ def parse_idx_data(file):
         if 'Ticker' in df.columns and 'Close' in df.columns:
             df = df.dropna(subset=['Ticker', 'Close'])
             df['Ticker'] = df['Ticker'].astype(str).str.strip().str.upper()
-            df['Close'] = df['Close'].astype(str).str.replace(',', '', regex=False).str.replace('.', '', regex=False)
-            df['Close'] = pd.to_numeric(df['Close'], errors='coerce')
-            df = df.dropna(subset=['Close'])
+            df['Close'] = pd.to_numeric(df['Close'].astype(str).str.replace(',', '').str.replace('.', ''), errors='coerce')
             return dict(zip(df['Ticker'], df['Close']))
         else: return {}
     except: return {}
 
-# --- 3. MENU UTAMA ---
-st.markdown("<h2 style='text-align: center;'>⚙️ Capelang Algo App <span style='font-size:16px; color:#8a92b2;'>v9.7 (Auto-Flush Edition)</span></h2>", unsafe_allow_html=True)
+st.markdown("<h2 style='text-align: center;'>⚙️ Capelang Algo App <span style='font-size:16px; color:#8a92b2;'>v10.1 (TXT Data Support)</span></h2>", unsafe_allow_html=True)
 menu = st.radio("Mode:", ["📡 Live Radar", "📋 Evaluator Manual", "🏆 Evaluator EOD"], horizontal=True, label_visibility="collapsed")
 st.divider()
 
-# ==========================================
-# APLIKASI 1: LIVE RADAR (LEGO ASSEMBLER)
-# ==========================================
 if menu == "📡 Live Radar":
     df_live = pd.DataFrame()
     engine_status = "⚠️ Mode Google Sheets (Normal Delay)"
@@ -164,54 +140,34 @@ if menu == "📡 Live Radar":
         try:
             raw_signals = r_client.lrange("live_signals", 0, -1)
             if raw_signals:
-                signals_list = []
-                for sig in raw_signals:
-                    parts = sig.split("|")
-                    if len(parts) == 4:
-                        signals_list.append({'Waktu': parts[0], 'Algo': parts[1], 'Ticker': parts[2], 'Price': float(parts[3])})
+                signals_list = [{'Waktu': p[0], 'Algo': p[1], 'Ticker': p[2], 'Price': float(p[3])} for p in (sig.split("|") for sig in raw_signals) if len(p) == 4]
                 df_live = pd.DataFrame(signals_list)
                 engine_status = "⚡ Mode Redis Kilat (0 Detik Delay)"
-        except:
-            pass
+        except: pass
 
     if df_live.empty:
         try:
             df_temp = pd.read_csv(SHEET_CSV_URL)
-            if not df_temp.empty:
-                df_live = standarisasi_kolom(df_temp).dropna(subset=['Ticker', 'Price'])
-        except:
-            pass
+            if not df_temp.empty: df_live = standarisasi_kolom(df_temp).dropna(subset=['Ticker', 'Price'])
+        except: pass
 
     col_kiri, col_kanan = st.columns([1, 2.5], gap="large")
 
     with col_kiri:
         st.markdown('<div class="panel-kiri">', unsafe_allow_html=True)
         st.markdown(f"### 📡 Live Engine\n<span style='font-size:12px; color:#00cc96;'>{engine_status}</span>", unsafe_allow_html=True)
-        st.write("")
-        st.caption("Resep Combo V9.5 dengan Sistem Filter AVOID.")
         st.divider()
-        st.markdown(f"""
-        <div style='font-size:12px; color:#8a92b2;'>
-            <div style='display:flex; justify-content:space-between;'><span>Status Server:</span> <span style='color:#00cc96;'>✅ Terhubung</span></div>
-            <div style='display:flex; justify-content:space-between;'><span>Total Balok Saat Ini:</span> <span style='color:#3b82f6;'>{len(df_live) if not df_live.empty else 0} Balok</span></div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # ⚡ NEW: TOMBOL FLUSH REDIS (Kuras Data Kemarin)
+        st.markdown(f"""<div style='font-size:12px; color:#8a92b2;'><div style='display:flex; justify-content:space-between;'><span>Status Server:</span> <span style='color:#00cc96;'>✅ Terhubung</span></div><div style='display:flex; justify-content:space-between;'><span>Total Balok Saat Ini:</span> <span style='color:#3b82f6;'>{len(df_live) if not df_live.empty else 0} Balok</span></div></div>""", unsafe_allow_html=True)
         st.write("")
         if st.button("🧹 Bersihkan Radar (Mulai Hari Baru)", use_container_width=True):
             if r_client:
-                r_client.delete("live_signals") # Ini perintah mutlak buat ngebuang seluruh isi brankas Redis lu
-                st.rerun()
-            else:
-                st.error("⚠️ Koneksi Redis terputus, gagal membersihkan.")
-                
+                r_client.delete("live_signals"); st.rerun()
+            else: st.error("⚠️ Koneksi Redis terputus, gagal membersihkan.")
         st.markdown('</div>', unsafe_allow_html=True)
 
     with col_kanan:
         st.markdown("### 📡 Radar Rekomendasi AI")
-        if df_live.empty: 
-            st.info("✅ Menunggu balok sinyal pertama masuk...")
+        if df_live.empty: st.info("✅ Menunggu balok sinyal pertama masuk...")
         else:
             df_live_reversed = df_live.iloc[::-1]
             tickers_terbaru = df_live_reversed['Ticker'].drop_duplicates().tolist()
@@ -220,79 +176,44 @@ if menu == "📡 Live Radar":
                 data_saham = df_live[df_live['Ticker'] == ticker]
                 if data_saham.empty: continue
                 
-                algos_saham_ini = data_saham['Algo'].dropna().tolist()
-                list_balok = list(set(algos_saham_ini)) 
+                list_balok = list(set(data_saham['Algo'].dropna().tolist()))
                 jumlah_balok = len(list_balok)
+                last_price, last_time = data_saham['Price'].iloc[-1], data_saham['Waktu'].iloc[-1]
                 
-                last_price = data_saham['Price'].iloc[-1]
-                last_time = data_saham['Waktu'].iloc[-1]
+                status_text, css_class, badge_class = "🧱 WAIT (Kumpul Balok)", "wait", "orange"
                 
-                status_text = "🧱 WAIT (Kumpul Balok)"
-                css_class, badge_class = "wait", "orange"
-                
-                # ==============================================================
-                # 🧬 6 RESEP COMBO LEGO V9.5 (TERMASUK AVOID TRAP)
-                # ==============================================================
-                
-                # 🚨 RESEP AVOID: PISAU JATUH / FAKE PULLBACK (Ritel Nyangkut)
                 if "merah dihaka" in list_balok and not any(x in list_balok for x in ["14_Serok_Harga_Merah_Berbalik", "Rebound botbox", "Pantulan Cepat Pagi", "Kawal Atas VWAP", "Smart Money Akumulasi"]):
                     status_text = f"⚠️ AVOID: PISAU JATUH (Jebakan Ritel!)"; css_class, badge_class = "sell", "red"
-
-                # 🔥 RESEP 1: COMBO DEWA CUAN 24% (Strong Buy)
-                elif "Open=Low" in list_balok and any(x in list_balok for x in ["TR_Super_Bullish", "GC MA Cleanmoney", "Momentum Bandar Rasio"]):
-                    status_text = f"🔥 STRONG BUY: COMBO DEWA ({jumlah_balok} Balok!)"; css_class, badge_class = "naga", "pink"
-                
-                # 🚀 RESEP 2: TREND NGEGAS (Scalping/Copet Kilat)
-                elif "MO_Trend_Ngegas_ADX" in list_balok and any(x in list_balok for x in ["Ledakan Vol ma20", "MO_Momentum_Sehat", "Cross Up VWAP"]):
-                    status_text = f"🚀 BUY: TREND NGEGAS ({jumlah_balok} Balok)"; css_class, badge_class = "buy", "green"
-                    
-                # 🎣 RESEP 3: LEGENDA LAMA BANGKIT (Serok Bawah Berbalik)
+                elif any(x in list_balok for x in ["MO_Trend_Ngegas_ADX", "MF_RMF_Kuat"]) and any(x in list_balok for x in ["TR_Super_Bullish", "Momentum Bandar Rasio"]) and any(x in list_balok for x in ["MO_Speed_Cepat", "Cross Up VWAP"]):
+                    status_text = f"🔥 NAGA BANGKIT (Potensi Cuan 32%!)"; css_class, badge_class = "naga", "pink"
+                elif "Pantulan Cepat Pagi" in list_balok and "Rebound botbox" in list_balok and "Cross Up VWAP" in list_balok:
+                    status_text = f"⚡ STRONG BUY: V-SHAPE REVERSAL ({jumlah_balok} Balok!)"; css_class, badge_class = "naga", "pink"
+                elif "Cross Up VWAP" in list_balok and "GC MA Cleanmoney" in list_balok and any(x in list_balok for x in ["Breakout Siang Valid", "Ledakan Vol ma20", "Pantulan Cepat Pagi"]):
+                    status_text = f"💎 SUPER BUY: TEMBUS VWAP ({jumlah_balok} Balok)"; css_class, badge_class = "buy", "green"
                 elif any(x in list_balok for x in ["14_Serok_Harga_Merah_Berbalik", "MF_Bandar_Serok"]) and any(x in list_balok for x in ["Pantulan Cepat Pagi", "Rebound botbox", "Kawal Atas VWAP"]):
                     status_text = f"🎣 BUY: SEROK BAWAH ({jumlah_balok} Balok)"; css_class, badge_class = "buy", "green"
-
-                # 🛍️ RESEP 4: BREAKOUT / KONSOLIDASI (BSJP / Swing Pendek)
-                elif any(x in list_balok for x in ["Konsolidasi Sehat Siang", "Persiapan Tembus Siang"]) and any(x in list_balok for x in ["Breakout Penutupan", "Value Transaksi Besar", "Gap Up Lanjut Naik"]):
+                elif any(x in list_balok for x in ["Konsolidasi Sehat Siang", "Breakout Siang Valid"]) and any(x in list_balok for x in ["Breakout Penutupan", "Value Transaksi Besar", "Gap Up Lanjut Naik"]):
                     status_text = f"🛍️ BUY: BREAKOUT SIANG ({jumlah_balok} Balok)"; css_class, badge_class = "buy", "green"
-
-                # 💎 RESEP 5: AKUMULASI BANDAR (Cocok buat hold 2-3 hari)
-                elif any(x in list_balok for x in ["Smart Money Akumulasi", "Clean Money Kuat"]) and any(x in list_balok for x in ["Uptrend Kuat Bandar RLA 1", "TR_Uptrend_Aktif", "TR_Super_Bullish"]):
-                    status_text = f"💎 BUY: AKUMULASI BANDAR ({jumlah_balok} Balok)"; css_class, badge_class = "buy", "green"
-
-                # ⚙️ MERAKIT COMBO (Lebih dari 2 Balok tapi belum masuk resep di atas)
-                elif jumlah_balok >= 2:
-                    status_text = f"⚙️ MERAKIT COMBO ({jumlah_balok} Balok)"; css_class, badge_class = "wait", "orange"
-                
-                # 🧱 WAIT (Balok Tunggal)
-                else:
-                    status_text = "🧱 WAIT (Cuma 1 Balok)"; css_class, badge_class = "wait", "orange"
+                elif jumlah_balok >= 2: status_text = f"⚙️ MERAKIT COMBO ({jumlah_balok} Balok)"; css_class, badge_class = "wait", "orange"
+                else: status_text = "🧱 WAIT (Cuma 1 Balok)"; css_class, badge_class = "wait", "orange"
 
                 gabungan_balok = " + ".join(list_balok)
                 st.markdown(f"""
                 <div class="trade-card {css_class}">
-                    <div>
-                        <div style="display:flex; align-items:center;"><span class="ticker-name {css_class}">{ticker}</span><span class="badge {badge_class}">{status_text}</span></div>
-                        <div class="trade-details">Komponen: <strong style='color:white;'>[{gabungan_balok}]</strong> <br> Jam Terakhir: {last_time}</div>
-                    </div>
+                    <div><div style="display:flex; align-items:center;"><span class="ticker-name {css_class}">{ticker}</span><span class="badge {badge_class}">{status_text}</span></div>
+                    <div class="trade-details">Komponen: <strong style='color:white;'>[{gabungan_balok}]</strong> <br> Jam Terakhir: {last_time}</div></div>
                     <div><div class="pl-amount" style="color:white;">Price: Rp {int(last_price)}</div></div>
                 </div>""", unsafe_allow_html=True)
-    time.sleep(1) 
-    st.rerun()
+    time.sleep(1); st.rerun()
 
-# ==========================================
-# TAB MANUAL
-# ==========================================
 elif menu == "📋 Evaluator Manual":
     col_in, col_out = st.columns([1, 2.5], gap="large")
     with col_in:
         st.markdown('<div class="panel-kiri">', unsafe_allow_html=True)
         st.markdown("### 📋 Evaluator Teks")
         teks_input = st.text_area("Paste Sinyal Telegram di sini:", value=st.session_state['manual_txt'], height=250)
-        if teks_input != st.session_state['manual_txt']:
-            st.session_state['manual_txt'] = teks_input
-            st.rerun()
-        if st.button("🗑️ Bersihkan Teks", use_container_width=True):
-            st.session_state['manual_txt'] = ""
-            st.rerun()
+        if teks_input != st.session_state['manual_txt']: st.session_state['manual_txt'] = teks_input; st.rerun()
+        if st.button("🗑️ Bersihkan Teks", use_container_width=True): st.session_state['manual_txt'] = ""; st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
     with col_out:
         if st.session_state['manual_txt']:
@@ -305,67 +226,41 @@ elif menu == "📋 Evaluator Manual":
                 st.dataframe(pd.DataFrame(data_sim), use_container_width=True, hide_index=True)
         else: st.info("👈 Silakan tempel teks sinyal dari Telegram.")
 
-# ==========================================
-# TAB EOD (DENGAN MULTI-FILE & MAX PEAK METRICS)
-# ==========================================
 elif menu == "🏆 Evaluator EOD":
     col1, col2 = st.columns(2)
     with col1:
         st.markdown("### 1️⃣ Sumber Data Sinyal")
         sumber_sinyal = st.radio("Pilih sumber sinyal lu:", ["📂 Upload Sinyal Manual (Telegram/CSV)", "📡 Otomatis (Google Sheets)"], key="rad_sinyal")
-        
         if sumber_sinyal == "📂 Upload Sinyal Manual (Telegram/CSV)":
             if st.session_state['eod_mentah'].empty:
                 files_sinyal = st.file_uploader("Upload File Sinyal (Bisa Blok Banyak File Sekaligus)", type=['csv', 'txt'], accept_multiple_files=True)
                 if files_sinyal:
-                    all_data = []
-                    for f in files_sinyal:
-                        df_parsed = parse_telegram_log_bulletproof(f)
-                        if not df_parsed.empty:
-                            all_data.append(df_parsed)
-                    
-                    if all_data:
-                        st.session_state['eod_mentah'] = pd.concat(all_data, ignore_index=True)
-                        st.session_state['eod_hasil'] = None
-                        st.rerun()
-                    else:
-                        st.warning("⚠️ Tidak ada format sinyal valid yang ditemukan di file-file tersebut.")
+                    all_data = [parse_telegram_log_bulletproof(f) for f in files_sinyal if not parse_telegram_log_bulletproof(f).empty]
+                    if all_data: st.session_state['eod_mentah'] = pd.concat(all_data, ignore_index=True); st.session_state['eod_hasil'] = None; st.rerun()
+                    else: st.warning("⚠️ Tidak ada format sinyal valid yang ditemukan di file-file tersebut.")
             else:
                 st.success(f"✅ Data Sinyal Tersimpan di Memori ({len(st.session_state['eod_mentah'])} Sinyal).")
-                if st.button("🗑️ Ganti File Sinyal"):
-                    st.session_state['eod_mentah'] = pd.DataFrame()
-                    st.session_state['eod_hasil'] = None
-                    st.rerun()
+                if st.button("🗑️ Ganti File Sinyal"): st.session_state['eod_mentah'] = pd.DataFrame(); st.session_state['eod_hasil'] = None; st.rerun()
         else:
             try:
                 df_temp = pd.read_csv(SHEET_CSV_URL)
-                if not df_temp.empty: 
-                    st.session_state['eod_mentah'] = standarisasi_kolom(df_temp)
-                    st.success(f"✅ Sinkronisasi Google Sheets Sukses ({len(st.session_state['eod_mentah'])} Sinyal).")
+                if not df_temp.empty: st.session_state['eod_mentah'] = standarisasi_kolom(df_temp); st.success(f"✅ Sinkronisasi Google Sheets Sukses ({len(st.session_state['eod_mentah'])} Sinyal).")
                 else: st.warning("Sheets Kosong")
             except Exception as e: st.error(f"⚠️ Gagal terhubung ke Google Sheets: {e}")
 
     with col2:
         st.markdown("### 2️⃣ Sumber Harga EOD (Penutupan)")
-        sumber_eod = st.radio("Pilih sumber harga EOD lu:", ["📊 Upload Data Resmi IDX (.xls/.xlsx/.csv)", "📡 Otomatis (Yahoo Finance)"], key="rad_eod")
-        if sumber_eod == "📊 Upload Data Resmi IDX (.xls/.xlsx/.csv)":
+        # ⚡ NEW: .txt ditambahkan di menu radio dan uploader
+        sumber_eod = st.radio("Pilih sumber harga EOD lu:", ["📊 Upload Data Resmi IDX (.xls/.xlsx/.csv/.txt)", "📡 Otomatis (Yahoo Finance)"], key="rad_eod")
+        if sumber_eod == "📊 Upload Data Resmi IDX (.xls/.xlsx/.csv/.txt)":
             if not st.session_state['eod_idx']:
-                file_idx = st.file_uploader("Upload File dari IDX", type=['xlsx', 'xls', 'csv'])
-                if file_idx:
-                    st.session_state['eod_idx'] = parse_idx_data(file_idx)
-                    st.session_state['eod_hasil'] = None
-                    st.rerun()
+                file_idx = st.file_uploader("Upload File dari IDX", type=['xlsx', 'xls', 'csv', 'txt'])
+                if file_idx: st.session_state['eod_idx'] = parse_idx_data(file_idx); st.session_state['eod_hasil'] = None; st.rerun()
             else:
                 st.success(f"✅ Data IDX Tersimpan di Memori ({len(st.session_state['eod_idx'])} Emiten).")
-                if st.button("🗑️ Ganti File IDX"):
-                    st.session_state['eod_idx'] = {}
-                    st.session_state['eod_hasil'] = None
-                    st.rerun()
+                if st.button("🗑️ Ganti File IDX"): st.session_state['eod_idx'] = {}; st.session_state['eod_hasil'] = None; st.rerun()
         else:
-            if st.session_state['eod_idx']: 
-                st.session_state['eod_idx'] = {}
-                st.session_state['eod_hasil'] = None
-                st.rerun()
+            if st.session_state['eod_idx']: st.session_state['eod_idx'] = {}; st.session_state['eod_hasil'] = None; st.rerun()
             st.info("📡 AI akan menarik harga langsung dari Yahoo Finance.")
 
     st.divider()
@@ -375,9 +270,7 @@ elif menu == "🏆 Evaluator EOD":
         df_olah['Price'] = pd.to_numeric(df_olah['Price'], errors='coerce')
         df_olah = df_olah.dropna(subset=['Ticker', 'Price'])
         tickers = df_olah['Ticker'].unique()
-        
-        close_prices = {}
-        high_prices = {} 
+        close_prices, high_prices = {}, {} 
         
         if len(tickers) > 0:
             st.write("🤖 **Memproses Evaluasi End of Day & Intraday Max Profit...**")
@@ -385,103 +278,54 @@ elif menu == "🏆 Evaluator EOD":
             for i, ticker in enumerate(tickers):
                 try:
                     data_saham = yf.Ticker(f"{ticker}.JK").history(period="5d")
-                    if not data_saham.empty:
-                        yahoo_close = float(data_saham['Close'].iloc[-1])
-                        yahoo_high = float(data_saham['High'].iloc[-1])
-                    else:
-                        yahoo_close = float(df_olah[df_olah['Ticker']==ticker]['Price'].iloc[-1])
-                        yahoo_high = yahoo_close
-                except: 
-                    yahoo_close = float(df_olah[df_olah['Ticker']==ticker]['Price'].iloc[-1])
-                    yahoo_high = yahoo_close
+                    if not data_saham.empty: yahoo_close, yahoo_high = float(data_saham['Close'].iloc[-1]), float(data_saham['High'].iloc[-1])
+                    else: yahoo_close = yahoo_high = float(df_olah[df_olah['Ticker']==ticker]['Price'].iloc[-1])
+                except: yahoo_close = yahoo_high = float(df_olah[df_olah['Ticker']==ticker]['Price'].iloc[-1])
                 
                 if harga_idx_manual and ticker in harga_idx_manual:
                     close_prices[ticker] = float(harga_idx_manual[ticker])
                     high_prices[ticker] = max(yahoo_high, close_prices[ticker])
                 else:
-                    close_prices[ticker] = yahoo_close
-                    high_prices[ticker] = yahoo_high
-                    
+                    close_prices[ticker], high_prices[ticker] = yahoo_close, yahoo_high
                 progress_bar.progress((i + 1) / len(tickers))
             progress_bar.empty()
             
         df_olah['EOD_Close'] = df_olah['Ticker'].map(close_prices)
         df_olah['Max_High'] = df_olah['Ticker'].map(high_prices)
-        
         df_olah['Profit_%'] = ((df_olah['EOD_Close'] - df_olah['Price']) / df_olah['Price']) * 100
         df_olah['Max_Profit_%'] = ((df_olah['Max_High'] - df_olah['Price']) / df_olah['Price']) * 100
-        
         df_olah['Status'] = df_olah['Profit_%'].apply(lambda x: 'WIN 🟢' if x > 0 else ('LOSS 🔴' if x < 0 else 'BEP ⚪'))
         return df_olah
 
     if not st.session_state['eod_mentah'].empty:
-        if st.session_state['eod_hasil'] is None:
-            st.session_state['eod_hasil'] = proses_data_eod(st.session_state['eod_mentah'], st.session_state['eod_idx'])
+        if st.session_state['eod_hasil'] is None: st.session_state['eod_hasil'] = proses_data_eod(st.session_state['eod_mentah'], st.session_state['eod_idx'])
         df_eod = st.session_state['eod_hasil']
         
         if not df_eod.empty:
             col_head1, col_head2 = st.columns([4, 1])
             with col_head1: st.subheader("🔥 Ranking Performa Lego Hari Ini")
             with col_head2:
-                if st.button("🔄 Hitung Ulang", use_container_width=True):
-                    st.session_state['eod_hasil'] = None
-                    st.rerun()
+                if st.button("🔄 Hitung Ulang", use_container_width=True): st.session_state['eod_hasil'] = None; st.rerun()
             if 'Algo' in df_eod.columns:
                 algo_stats = df_eod.groupby('Algo').apply(
                     lambda x: pd.Series({
-                        'Total Sinyal': len(x), 
-                        'Win (EOD)': len(x[x['Status'] == 'WIN 🟢']), 
-                        'Loss (EOD)': len(x[x['Status'] == 'LOSS 🔴']), 
-                        'Win Rate EOD (%)': (len(x[x['Status'] == 'WIN 🟢']) / len(x)) * 100, 
-                        'Rata-rata Profit EOD (%)': x['Profit_%'].mean(),
-                        'Rata-rata Max Potensi Cuan (%)': x['Max_Profit_%'].mean(),
-                        'Max Potensi Cuan Tertinggi (%)': x['Max_Profit_%'].max()
+                        'Total Sinyal': len(x), 'Win (EOD)': len(x[x['Status'] == 'WIN 🟢']), 'Loss (EOD)': len(x[x['Status'] == 'LOSS 🔴']), 
+                        'Win Rate EOD (%)': (len(x[x['Status'] == 'WIN 🟢']) / len(x)) * 100, 'Rata-rata Profit EOD (%)': x['Profit_%'].mean(),
+                        'Rata-rata Max Potensi Cuan (%)': x['Max_Profit_%'].mean(), 'Max Potensi Cuan Tertinggi (%)': x['Max_Profit_%'].max()
                     })
                 ).reset_index().sort_values(by=['Rata-rata Max Potensi Cuan (%)', 'Win Rate EOD (%)'], ascending=[False, False])
-                
-                st.dataframe(
-                    algo_stats.style.format({
-                        'Total Sinyal': '{:.0f}', 
-                        'Win (EOD)': '{:.0f}', 
-                        'Loss (EOD)': '{:.0f}', 
-                        'Win Rate EOD (%)': '{:.1f}%', 
-                        'Rata-rata Profit EOD (%)': '{:+.2f}%',
-                        'Rata-rata Max Potensi Cuan (%)': '{:+.2f}%',
-                        'Max Potensi Cuan Tertinggi (%)': '{:+.2f}%'
-                    }), 
-                    use_container_width=True, 
-                    hide_index=True
-                )
+                st.dataframe(algo_stats.style.format({'Total Sinyal': '{:.0f}', 'Win (EOD)': '{:.0f}', 'Loss (EOD)': '{:.0f}', 'Win Rate EOD (%)': '{:.1f}%', 'Rata-rata Profit EOD (%)': '{:+.2f}%', 'Rata-rata Max Potensi Cuan (%)': '{:+.2f}%', 'Max Potensi Cuan Tertinggi (%)': '{:+.2f}%'}), use_container_width=True, hide_index=True)
             
             st.divider()
             st.subheader("🧬 Saham dengan Rakitan Combo Lego")
             if 'Algo' in df_eod.columns:
                 combo_data = df_eod.groupby('Ticker').apply(
                     lambda x: pd.Series({
-                        'Jumlah Balok': len(x['Algo'].unique()), 
-                        'Komponen Balok Lego': " + ".join(x['Algo'].unique()), 
-                        'Harga Entry': x['Price'].iloc[0], 
-                        'Harga Puncak (High)': x['Max_High'].iloc[0],
-                        'Harga Penutupan (EOD)': x['EOD_Close'].iloc[0], 
-                        'Max Potensi Cuan (%)': x['Max_Profit_%'].iloc[0],
-                        'Profit EOD (%)': x['Profit_%'].iloc[0], 
-                        'Hasil Akhir': x['Status'].iloc[0]
+                        'Jumlah Balok': len(x['Algo'].unique()), 'Komponen Balok Lego': " + ".join(x['Algo'].unique()), 
+                        'Harga Entry': x['Price'].iloc[0], 'Harga Puncak (High)': x['Max_High'].iloc[0], 'Harga Penutupan (EOD)': x['EOD_Close'].iloc[0], 
+                        'Max Potensi Cuan (%)': x['Max_Profit_%'].iloc[0], 'Profit EOD (%)': x['Profit_%'].iloc[0], 'Hasil Akhir': x['Status'].iloc[0]
                     })
                 ).reset_index()
-                
                 combo_data_only = combo_data[combo_data['Jumlah Balok'] > 1].sort_values(by='Max Potensi Cuan (%)', ascending=False)
-                
-                if not combo_data_only.empty: 
-                    st.dataframe(
-                        combo_data_only.style.format({
-                            'Harga Entry': '{:.0f}', 
-                            'Harga Puncak (High)': '{:.0f}',
-                            'Harga Penutupan (EOD)': '{:.0f}', 
-                            'Max Potensi Cuan (%)': '{:+.2f}%',
-                            'Profit EOD (%)': '{:+.2f}%'
-                        }), 
-                        use_container_width=True, 
-                        hide_index=True
-                    )
-                else: 
-                    st.info("Tidak ada saham yang berhasil merakit Combo Lego di data ini.")
+                if not combo_data_only.empty: st.dataframe(combo_data_only.style.format({'Harga Entry': '{:.0f}', 'Harga Puncak (High)': '{:.0f}', 'Harga Penutupan (EOD)': '{:.0f}', 'Max Potensi Cuan (%)': '{:+.2f}%', 'Profit EOD (%)': '{:+.2f}%'}), use_container_width=True, hide_index=True)
+                else: st.info("Tidak ada saham yang berhasil merakit Combo Lego di data ini.")
