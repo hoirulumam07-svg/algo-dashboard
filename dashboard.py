@@ -163,7 +163,7 @@ def proses_data_eod(df, harga_idx_manual):
     df_olah['Status'] = df_olah['Profit_%'].apply(lambda x: 'WIN 🟢' if x > 0 else ('LOSS 🔴' if x < 0 else 'BEP ⚪'))
     return df_olah
 
-st.markdown("<h2 style='text-align: center;'>⚙️ Capelang Algo App <span style='font-size:16px; color:#8a92b2;'>v10.4 (Live Tracker Edition)</span></h2>", unsafe_allow_html=True)
+st.markdown("<h2 style='text-align: center;'>⚙️ Capelang Algo App <span style='font-size:16px; color:#8a92b2;'>v10.5 (Interactive Live Radar)</span></h2>", unsafe_allow_html=True)
 menu = st.radio("Mode:", ["📡 Live Radar", "📋 Evaluator Manual", "🏆 Evaluator EOD", "💼 Simulator Portofolio"], horizontal=True, label_visibility="collapsed")
 st.divider()
 
@@ -171,6 +171,7 @@ if menu == "📡 Live Radar":
     df_live = pd.DataFrame()
     engine_status = "⚠️ Mode Google Sheets (Normal Delay)"
     
+    # 1. CEK REDIS (LIVE)
     if r_client:
         try:
             raw_signals = r_client.lrange("live_signals", 0, -1)
@@ -180,6 +181,7 @@ if menu == "📡 Live Radar":
                 engine_status = "⚡ Mode Redis Kilat (0 Detik Delay)"
         except: pass
 
+    # 2. CEK GOOGLE SHEETS (FALLBACK)
     if df_live.empty:
         try:
             df_temp = pd.read_csv(SHEET_CSV_URL)
@@ -190,8 +192,24 @@ if menu == "📡 Live Radar":
 
     with col_kiri:
         st.markdown('<div class="panel-kiri">', unsafe_allow_html=True)
-        st.markdown(f"### 📡 Live Engine\n<span style='font-size:12px; color:#00cc96;'>{engine_status}</span>", unsafe_allow_html=True)
+        
+        # ⚡ NEW: UPLOADER DI LIVE RADAR
+        st.markdown("### 📥 Simulasi Upload Manual")
+        live_file = st.file_uploader("Upload File Sinyal (TXT/CSV)", type=['txt', 'csv'], key="live_uploader")
+        if live_file:
+            df_live_temp = parse_telegram_log_bulletproof(live_file)
+            if df_live_temp.empty:
+                live_file.seek(0)
+                try: df_live_temp = standarisasi_kolom(pd.read_csv(live_file))
+                except: pass
+            if not df_live_temp.empty:
+                df_live = df_live_temp.dropna(subset=['Ticker', 'Price'])
+                engine_status = "📂 Mode File Manual (Simulasi)"
+                st.success("✅ File berhasil diload ke Radar!")
+        
         st.divider()
+        st.markdown(f"### 📡 Live Engine\n<span style='font-size:12px; color:#00cc96;'>{engine_status}</span>", unsafe_allow_html=True)
+        st.write("")
         st.markdown(f"""<div style='font-size:12px; color:#8a92b2;'><div style='display:flex; justify-content:space-between;'><span>Status Server:</span> <span style='color:#00cc96;'>✅ Terhubung</span></div><div style='display:flex; justify-content:space-between;'><span>Total Balok Saat Ini:</span> <span style='color:#3b82f6;'>{len(df_live) if not df_live.empty else 0} Balok</span></div></div>""", unsafe_allow_html=True)
         st.write("")
         if st.button("🧹 Bersihkan Radar (Mulai Hari Baru)", use_container_width=True):
@@ -202,7 +220,7 @@ if menu == "📡 Live Radar":
 
     with col_kanan:
         st.markdown("### 📡 Radar Rekomendasi AI")
-        if df_live.empty: st.info("✅ Menunggu balok sinyal pertama masuk...")
+        if df_live.empty: st.info("✅ Menunggu balok sinyal pertama masuk atau upload file manual...")
         else:
             df_live_reversed = df_live.iloc[::-1]
             tickers_terbaru = df_live_reversed['Ticker'].drop_duplicates().tolist()
@@ -246,7 +264,6 @@ if menu == "📡 Live Radar":
     st.divider()
     st.markdown("### 📜 Rekap Sinyal Masuk (Live Tracker)")
     if not df_live.empty:
-        # Menampilkan data mentah dari yang terbaru
         display_raw = df_live.iloc[::-1].reset_index(drop=True)
         st.dataframe(display_raw.style.format({'Price': 'Rp {:,.0f}'}), use_container_width=True)
     else:
