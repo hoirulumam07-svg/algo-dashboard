@@ -163,7 +163,7 @@ def proses_data_eod(df, harga_idx_manual):
     df_olah['Status'] = df_olah['Profit_%'].apply(lambda x: 'WIN 🟢' if x > 0 else ('LOSS 🔴' if x < 0 else 'BEP ⚪'))
     return df_olah
 
-st.markdown("<h2 style='text-align: center;'>⚙️ Capelang Algo App <span style='font-size:16px; color:#8a92b2;'>v10.5 (Interactive Live Radar)</span></h2>", unsafe_allow_html=True)
+st.markdown("<h2 style='text-align: center;'>⚙️ Capelang Algo App <span style='font-size:16px; color:#8a92b2;'>v10.6 (Multi-File Live Radar)</span></h2>", unsafe_allow_html=True)
 menu = st.radio("Mode:", ["📡 Live Radar", "📋 Evaluator Manual", "🏆 Evaluator EOD", "💼 Simulator Portofolio"], horizontal=True, label_visibility="collapsed")
 st.divider()
 
@@ -193,19 +193,32 @@ if menu == "📡 Live Radar":
     with col_kiri:
         st.markdown('<div class="panel-kiri">', unsafe_allow_html=True)
         
-        # ⚡ NEW: UPLOADER DI LIVE RADAR
+        # ⚡ NEW: UPLOADER MULTI-FILE DI LIVE RADAR
         st.markdown("### 📥 Simulasi Upload Manual")
-        live_file = st.file_uploader("Upload File Sinyal (TXT/CSV)", type=['txt', 'csv'], key="live_uploader")
-        if live_file:
-            df_live_temp = parse_telegram_log_bulletproof(live_file)
-            if df_live_temp.empty:
-                live_file.seek(0)
-                try: df_live_temp = standarisasi_kolom(pd.read_csv(live_file))
-                except: pass
-            if not df_live_temp.empty:
+        live_files = st.file_uploader("Upload File Sinyal (TXT/CSV)", type=['txt', 'csv'], accept_multiple_files=True, key="live_uploader")
+        
+        if live_files:
+            all_live_data = []
+            for f in live_files:
+                df_parsed = parse_telegram_log_bulletproof(f)
+                if not df_parsed.empty:
+                    all_live_data.append(df_parsed)
+                else:
+                    # Coba baca sebagai CSV standar
+                    f.seek(0)
+                    try:
+                        df_baca = standarisasi_kolom(pd.read_csv(f))
+                        if not df_baca.empty and 'Ticker' in df_baca.columns:
+                            all_live_data.append(df_baca)
+                    except: pass
+
+            if all_live_data:
+                df_live_temp = pd.concat(all_live_data, ignore_index=True)
                 df_live = df_live_temp.dropna(subset=['Ticker', 'Price'])
                 engine_status = "📂 Mode File Manual (Simulasi)"
-                st.success("✅ File berhasil diload ke Radar!")
+                st.success(f"✅ {len(live_files)} File berhasil diload ke Radar!")
+            else:
+                st.warning("⚠️ Tidak ada data sinyal valid di file yang diupload.")
         
         st.divider()
         st.markdown(f"### 📡 Live Engine\n<span style='font-size:12px; color:#00cc96;'>{engine_status}</span>", unsafe_allow_html=True)
