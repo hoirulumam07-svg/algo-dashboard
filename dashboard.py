@@ -62,13 +62,8 @@ def standarisasi_kolom(df):
     df = df.rename(columns=col_rename)
     if 'Price' not in df.columns and len(df.columns) >= 4:
         df.rename(columns={df.columns[0]: 'Waktu', df.columns[1]: 'Algo', df.columns[2]: 'Ticker', df.columns[3]: 'Price'}, inplace=True)
-    
-    # ⚡ NEW: PEMBERSIH KUTIP & SPASI GAIB DARI CSV
-    if 'Algo' in df.columns:
-        df['Algo'] = df['Algo'].astype(str).str.replace('"', '', regex=False).str.strip()
-    if 'Ticker' in df.columns:
-        df['Ticker'] = df['Ticker'].astype(str).str.replace('"', '', regex=False).str.strip().str.upper()
-        
+    if 'Algo' in df.columns: df['Algo'] = df['Algo'].astype(str).str.replace('"', '', regex=False).str.strip()
+    if 'Ticker' in df.columns: df['Ticker'] = df['Ticker'].astype(str).str.replace('"', '', regex=False).str.strip().str.upper()
     return df
 
 def parse_telegram_log_bulletproof(file_bytes):
@@ -80,7 +75,7 @@ def parse_telegram_log_bulletproof(file_bytes):
         line_clean = line.strip()
         algo_match = re.search(r'Algo Name\s*:\s*(.+)', line_clean, re.IGNORECASE)
         if algo_match:
-            current_algo = algo_match.group(1).replace('"', '').strip() # Bersihin kutip di text
+            current_algo = algo_match.group(1).replace('"', '').strip()
             continue
         pola = r'\b([A-Z]{4})\b[\s|]+(\d+)'
         match = re.search(pola, line_clean)
@@ -168,7 +163,7 @@ def proses_data_eod(df, harga_idx_manual):
     df_olah['Status'] = df_olah['Profit_%'].apply(lambda x: 'WIN 🟢' if x > 0 else ('LOSS 🔴' if x < 0 else 'BEP ⚪'))
     return df_olah
 
-st.markdown("<h2 style='text-align: center;'>⚙️ Capelang Algo App <span style='font-size:16px; color:#8a92b2;'>v10.3 (Auto-Clean Portfolio)</span></h2>", unsafe_allow_html=True)
+st.markdown("<h2 style='text-align: center;'>⚙️ Capelang Algo App <span style='font-size:16px; color:#8a92b2;'>v10.4 (Live Tracker Edition)</span></h2>", unsafe_allow_html=True)
 menu = st.radio("Mode:", ["📡 Live Radar", "📋 Evaluator Manual", "🏆 Evaluator EOD", "💼 Simulator Portofolio"], horizontal=True, label_visibility="collapsed")
 st.divider()
 
@@ -216,7 +211,6 @@ if menu == "📡 Live Radar":
                 data_saham = df_live[df_live['Ticker'] == ticker]
                 if data_saham.empty: continue
                 
-                # Pembersihan string (jaga-jaga ada spasi/kutip)
                 list_balok = [str(x).replace('"', '').strip() for x in data_saham['Algo'].dropna().tolist()]
                 list_balok = list(set(list_balok))
                 jumlah_balok = len(list_balok)
@@ -230,7 +224,6 @@ if menu == "📡 Live Radar":
                     status_text = f"🔥 NAGA BANGKIT (Potensi Cuan 32%!)"; css_class, badge_class = "naga", "pink"
                 elif "Pantulan Cepat Pagi" in list_balok and "Rebound botbox" in list_balok and "Cross Up VWAP" in list_balok:
                     status_text = f"⚡ STRONG BUY: V-SHAPE REVERSAL ({jumlah_balok} Balok!)"; css_class, badge_class = "naga", "pink"
-                # Support nama lama "Persiapan Tembus Siang" untuk jaga-jaga
                 elif "Cross Up VWAP" in list_balok and "GC MA Cleanmoney" in list_balok and any(x in list_balok for x in ["Breakout Siang Valid", "Persiapan Tembus Siang", "Ledakan Vol ma20", "Pantulan Cepat Pagi"]):
                     status_text = f"💎 SUPER BUY: TEMBUS VWAP ({jumlah_balok} Balok)"; css_class, badge_class = "buy", "green"
                 elif any(x in list_balok for x in ["14_Serok_Harga_Merah_Berbalik", "MF_Bandar_Serok"]) and any(x in list_balok for x in ["Pantulan Cepat Pagi", "Rebound botbox", "Kawal Atas VWAP"]):
@@ -249,6 +242,16 @@ if menu == "📡 Live Radar":
                     <div class="trade-details">Komponen: <strong style='color:white;'>[{gabungan_balok}]</strong> <br> Jam Terakhir: {last_time}</div></div>
                     <div><div class="pl-amount" style="color:white;">Price: Rp {int(last_price)}</div></div>
                 </div>""", unsafe_allow_html=True)
+                
+    st.divider()
+    st.markdown("### 📜 Rekap Sinyal Masuk (Live Tracker)")
+    if not df_live.empty:
+        # Menampilkan data mentah dari yang terbaru
+        display_raw = df_live.iloc[::-1].reset_index(drop=True)
+        st.dataframe(display_raw.style.format({'Price': 'Rp {:,.0f}'}), use_container_width=True)
+    else:
+        st.info("Belum ada rekap sinyal yang masuk hari ini.")
+        
     time.sleep(1); st.rerun()
 
 elif menu == "📋 Evaluator Manual":
@@ -281,8 +284,6 @@ elif menu in ["🏆 Evaluator EOD", "💼 Simulator Portofolio"]:
                 files_sinyal = st.file_uploader("Upload File Sinyal (Bisa Blok Banyak File Sekaligus)", type=['csv', 'txt'], accept_multiple_files=True)
                 if files_sinyal:
                     all_data = [parse_telegram_log_bulletproof(f) for f in files_sinyal if not parse_telegram_log_bulletproof(f).empty]
-                    
-                    # Tambahan parsing format CSV biasa kalau file-nya dari export web
                     if not all_data:
                         for f in files_sinyal:
                             f.seek(0)
@@ -290,7 +291,6 @@ elif menu in ["🏆 Evaluator EOD", "💼 Simulator Portofolio"]:
                                 df_baca = standarisasi_kolom(pd.read_csv(f))
                                 if not df_baca.empty and 'Ticker' in df_baca.columns: all_data.append(df_baca)
                             except: pass
-                            
                     if all_data: st.session_state['eod_mentah'] = pd.concat(all_data, ignore_index=True); st.session_state['eod_hasil'] = None; st.rerun()
                     else: st.warning("⚠️ Tidak ada format sinyal valid yang ditemukan di file-file tersebut.")
             else:
@@ -355,9 +355,7 @@ elif menu in ["🏆 Evaluator EOD", "💼 Simulator Portofolio"]:
             
             elif menu == "💼 Simulator Portofolio":
                 def cek_sinyal_buy(algos):
-                    # PEMADAM KUTIP GAIB (Memastikan string mulus pas dibaca AI)
                     list_b = [str(x).replace('"', '').strip() for x in algos]
-                    
                     if "merah dihaka" in list_b and not any(x in list_b for x in ["14_Serok_Harga_Merah_Berbalik", "Rebound botbox", "Pantulan Cepat Pagi", "Kawal Atas VWAP", "Smart Money Akumulasi"]): return "AVOID"
                     if any(x in list_b for x in ["MO_Trend_Ngegas_ADX", "MF_RMF_Kuat"]) and any(x in list_b for x in ["TR_Super_Bullish", "Momentum Bandar Rasio"]) and any(x in list_b for x in ["MO_Speed_Cepat", "Cross Up VWAP"]): return "NAGA BANGKIT"
                     if "Pantulan Cepat Pagi" in list_b and "Rebound botbox" in list_b and "Cross Up VWAP" in list_b: return "V-SHAPE REVERSAL"
