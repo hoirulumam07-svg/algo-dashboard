@@ -163,7 +163,7 @@ def proses_data_eod(df, harga_idx_manual):
     df_olah['Status'] = df_olah['Profit_%'].apply(lambda x: 'WIN 🟢' if x > 0 else ('LOSS 🔴' if x < 0 else 'BEP ⚪'))
     return df_olah
 
-st.markdown("<h2 style='text-align: center;'>⚙️ Capelang Algo App <span style='font-size:16px; color:#8a92b2;'>v10.6 (Multi-File Live Radar)</span></h2>", unsafe_allow_html=True)
+st.markdown("<h2 style='text-align: center;'>⚙️ Capelang Algo App <span style='font-size:16px; color:#8a92b2;'>v11.0 (Advanced Combo Update)</span></h2>", unsafe_allow_html=True)
 menu = st.radio("Mode:", ["📡 Live Radar", "📋 Evaluator Manual", "🏆 Evaluator EOD", "💼 Simulator Portofolio"], horizontal=True, label_visibility="collapsed")
 st.divider()
 
@@ -171,7 +171,6 @@ if menu == "📡 Live Radar":
     df_live = pd.DataFrame()
     engine_status = "⚠️ Mode Google Sheets (Normal Delay)"
 
-    # 1. CEK REDIS (LIVE)
     if r_client:
         try:
             raw_signals = r_client.lrange("live_signals", 0, -1)
@@ -181,7 +180,6 @@ if menu == "📡 Live Radar":
                 engine_status = "⚡ Mode Redis Kilat (0 Detik Delay)"
         except: pass
 
-    # 2. CEK GOOGLE SHEETS (FALLBACK)
     if df_live.empty:
         try:
             df_temp = pd.read_csv(SHEET_CSV_URL)
@@ -192,8 +190,6 @@ if menu == "📡 Live Radar":
 
     with col_kiri:
         st.markdown('<div class="panel-kiri">', unsafe_allow_html=True)
-
-        # ⚡ NEW: UPLOADER MULTI-FILE DI LIVE RADAR
         st.markdown("### 📥 Simulasi Upload Manual")
         live_files = st.file_uploader("Upload File Sinyal (TXT/CSV)", type=['txt', 'csv'], accept_multiple_files=True, key="live_uploader")
 
@@ -204,7 +200,6 @@ if menu == "📡 Live Radar":
                 if not df_parsed.empty:
                     all_live_data.append(df_parsed)
                 else:
-                    # Coba baca sebagai CSV standar
                     f.seek(0)
                     try:
                         df_baca = standarisasi_kolom(pd.read_csv(f))
@@ -249,6 +244,9 @@ if menu == "📡 Live Radar":
 
                 status_text, css_class, badge_class = "🧱 WAIT (Kumpul Balok)", "wait", "orange"
 
+                # ==========================================
+                # LOGIKA COMBO RADAR (LAMA + BARU)
+                # ==========================================
                 if "merah dihaka" in list_balok and not any(x in list_balok for x in ["14_Serok_Harga_Merah_Berbalik", "Rebound botbox", "Pantulan Cepat Pagi", "Kawal Atas VWAP", "Smart Money Akumulasi"]):
                     status_text = f"⚠️ AVOID: PISAU JATUH (Jebakan Ritel!)"; css_class, badge_class = "sell", "red"
                 elif any(x in list_balok for x in ["MO_Trend_Ngegas_ADX", "MF_RMF_Kuat"]) and any(x in list_balok for x in ["TR_Super_Bullish", "Momentum Bandar Rasio"]) and any(x in list_balok for x in ["MO_Speed_Cepat", "Cross Up VWAP"]):
@@ -263,6 +261,16 @@ if menu == "📡 Live Radar":
                     status_text = f"🛍️ BUY: BREAKOUT SIANG ({jumlah_balok} Balok)"; css_class, badge_class = "buy", "green"
                 elif any(x in list_balok for x in ["Smart Money Akumulasi", "Clean Money Kuat"]) and any(x in list_balok for x in ["Uptrend Kuat Bandar RLA 1", "TR_Uptrend_Aktif", "TR_Super_Bullish"]):
                     status_text = f"💎 BUY: AKUMULASI BANDAR ({jumlah_balok} Balok)"; css_class, badge_class = "buy", "green"
+                
+                # --- INJEKSI 3 COMBO BARU ---
+                elif "Momentum Bandar Rasio" in list_balok and any(x in list_balok for x in ["Sesi Pagi Agresif", "TR_Super_Bullish"]):
+                    status_text = f"🚀 BUY: MOMENTUM BOOSTER ({jumlah_balok} Balok)"; css_class, badge_class = "buy", "green"
+                elif "Clean Money Kuat" in list_balok and "MO_Momentum_Sehat" in list_balok:
+                    status_text = f"🎯 BUY: SNIPER CLEAN MONEY ({jumlah_balok} Balok)"; css_class, badge_class = "buy", "green"
+                elif "TR_Uptrend_Aktif" in list_balok and "MF_RMF_Kuat" in list_balok:
+                    status_text = f"🏄‍♂️ BUY: SEROKAN UPTREND ({jumlah_balok} Balok)"; css_class, badge_class = "buy", "green"
+                # ----------------------------
+                
                 elif jumlah_balok >= 2: status_text = f"⚙️ MERAKIT COMBO ({jumlah_balok} Balok)"; css_class, badge_class = "wait", "orange"
                 else: status_text = "🧱 WAIT (Cuma 1 Balok)"; css_class, badge_class = "wait", "orange"
 
@@ -278,7 +286,7 @@ if menu == "📡 Live Radar":
     st.markdown("### 📜 Rekap Sinyal Masuk (Live Tracker)")
     if not df_live.empty:
         display_raw = df_live.iloc[::-1].reset_index(drop=True)
-        st.dataframe(display_raw.style.format({'Price': 'Rp {:,.0f}'}), use_container_width=True)
+        st.dataframe(display_raw, use_container_width=True)
     else:
         st.info("Belum ada rekap sinyal yang masuk hari ini.")
 
@@ -393,6 +401,13 @@ elif menu in ["🏆 Evaluator EOD", "💼 Simulator Portofolio"]:
                     if any(x in list_b for x in ["14_Serok_Harga_Merah_Berbalik", "MF_Bandar_Serok"]) and any(x in list_b for x in ["Pantulan Cepat Pagi", "Rebound botbox", "Kawal Atas VWAP"]): return "SEROK BAWAH"
                     if any(x in list_b for x in ["Konsolidasi Sehat Siang", "Breakout Siang Valid", "Persiapan Tembus Siang"]) and any(x in list_b for x in ["Breakout Penutupan", "Value Transaksi Besar", "Gap Up Lanjut Naik"]): return "BREAKOUT SIANG"
                     if any(x in list_b for x in ["Smart Money Akumulasi", "Clean Money Kuat"]) and any(x in list_b for x in ["Uptrend Kuat Bandar RLA 1", "TR_Uptrend_Aktif", "TR_Super_Bullish"]): return "AKUMULASI BANDAR"
+                    
+                    # --- INJEKSI 3 COMBO BARU DI SIMULATOR ---
+                    if "Momentum Bandar Rasio" in list_b and any(x in list_b for x in ["Sesi Pagi Agresif", "TR_Super_Bullish"]): return "MOMENTUM BOOSTER"
+                    if "Clean Money Kuat" in list_b and "MO_Momentum_Sehat" in list_b: return "SNIPER CLEAN MONEY"
+                    if "TR_Uptrend_Aktif" in list_b and "MF_RMF_Kuat" in list_b: return "SEROKAN UPTREND"
+                    # -----------------------------------------
+                    
                     return "WAIT"
 
                 sim_data = df_eod.groupby('Ticker').apply(
@@ -402,7 +417,12 @@ elif menu in ["🏆 Evaluator EOD", "💼 Simulator Portofolio"]:
                     })
                 ).reset_index()
 
-                buy_trades = sim_data[sim_data['Sinyal AI'].isin(["NAGA BANGKIT", "V-SHAPE REVERSAL", "TEMBUS VWAP", "SEROK BAWAH", "BREAKOUT SIANG", "AKUMULASI BANDAR"])].copy()
+                # --- MENGUPDATE DAFTAR SINYAL YANG DIEKSEKUSI (DIBELI) ---
+                buy_trades = sim_data[sim_data['Sinyal AI'].isin([
+                    "NAGA BANGKIT", "V-SHAPE REVERSAL", "TEMBUS VWAP", "SEROK BAWAH", 
+                    "BREAKOUT SIANG", "AKUMULASI BANDAR",
+                    "MOMENTUM BOOSTER", "SNIPER CLEAN MONEY", "SEROKAN UPTREND"
+                ])].copy()
 
                 if not buy_trades.empty:
                     MODAL_AWAL = 500000000
