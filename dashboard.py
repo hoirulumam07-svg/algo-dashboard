@@ -5,6 +5,7 @@ import time
 import re
 import io
 import redis
+import plotly.graph_objects as go  # <-- Pakai ini biar grafiknya anti-error (100% stabil)
 
 st.set_page_config(page_title="Capelang Algo App", layout="wide")
 
@@ -22,43 +23,94 @@ if 'eod_mentah' not in st.session_state: st.session_state['eod_mentah'] = pd.Dat
 if 'eod_idx' not in st.session_state: st.session_state['eod_idx'] = {}
 if 'eod_hasil' not in st.session_state: st.session_state['eod_hasil'] = None
 
-# --- INJEKSI KOSMETIK BOTAXX (CSS) ---
+# --- INJEKSI KOSMETIK PREMIUM BOTAXX (CSS) ---
 st.markdown("""
     <style>
+    /* Sembunyikan bawaan Streamlit */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
     .block-container {padding-top: 1.5rem; padding-bottom: 1rem;}
     
-    .stApp { background-color: #111526; color: white; }
-    .panel-kiri { background-color: #181b2f; padding: 20px; border-radius: 10px; margin-bottom: 20px;}
+    /* Background Utama Premium Dark */
+    .stApp { background-color: #0d111c; color: #e2e8f0; }
     
-    /* Tombol Style Botaxx */
-    div.stButton > button:first-child { font-weight: bold; border-radius: 8px; transition: all 0.3s; }
+    /* Panel & Box Global */
+    .panel-kiri, .eval-box, .source-box { 
+        background-color: #151a2d; 
+        padding: 24px; 
+        border-radius: 12px; 
+        border: 1px solid #2a314d;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        margin-bottom: 20px;
+    }
     
-    .trade-card { background-color: #181b2f; padding: 15px; border-radius: 8px; border-left: 5px solid #2d334a; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+    /* Styling Navigasi Radio Menu Atas (Pill Style) */
+    div[data-testid="stRadio"] > div {
+        background-color: #151a2d;
+        padding: 6px;
+        border-radius: 12px;
+        display: inline-flex;
+        border: 1px solid #2a314d;
+    }
+    div[data-testid="stRadio"] label {
+        padding: 8px 16px;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+    /* Tombol Primary & Secondary dengan efek melayang */
+    div.stButton > button:first-child { 
+        font-weight: 600; 
+        border-radius: 8px; 
+        transition: all 0.3s ease;
+    }
+    div.stButton > button:first-child:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+    }
+    
+    /* Kartu Metrik (Simulator) Super Elegan (Glassmorphism) */
+    .metric-box { 
+        background: linear-gradient(145deg, #181d33, #111526); 
+        border-radius: 16px; 
+        padding: 24px 20px; 
+        text-align: center; 
+        border: 1px solid #2a314d;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        transition: transform 0.3s ease, border-color 0.3s ease;
+    }
+    .metric-box:hover {
+        transform: translateY(-5px);
+        border-color: #3b82f6;
+    }
+    .metric-title { color: #94a3b8; font-size: 14px; font-weight: 500; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;}
+    .metric-value { font-size: 28px; font-weight: 800; margin: 0; }
+    
+    /* Trade Card (Live Radar) */
+    .trade-card { background-color: #151a2d; padding: 16px; border-radius: 10px; border-left: 5px solid #2d334a; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
     .trade-card.buy { border-left-color: #00cc96; }
     .trade-card.sell { border-left-color: #ff4b4b; }
     .trade-card.wait { border-left-color: #ffa500; }
-    .trade-card.naga { border-left-color: #ff00ff; box-shadow: 0 0 10px #ff00ff; }
-    .ticker-name { font-size: 20px; font-weight: bold; margin-right: 10px; }
+    .trade-card.naga { border-left-color: #ff00ff; box-shadow: 0 0 12px rgba(255, 0, 255, 0.3); }
+    
+    /* Tipografi & Badge */
+    .ticker-name { font-size: 22px; font-weight: 900; margin-right: 12px; letter-spacing: 1px;}
     .ticker-name.buy { color: #00cc96; }
     .ticker-name.sell { color: #ff4b4b; }
     .ticker-name.wait { color: #ffa500; }
-    .ticker-name.naga { color: #ff00ff; text-shadow: 0 0 5px #ff00ff; }
-    .badge { font-size: 11px; padding: 4px 8px; border-radius: 4px; background-color: #2d334a; color: #a1a9cc; margin-right: 5px; font-weight: bold; }
-    .badge.purple { background-color: #5b2a86; color: #d4b3ff; }
-    .badge.green { background-color: rgba(0, 204, 150, 0.2); color: #00cc96; }
-    .badge.red { background-color: rgba(239, 85, 59, 0.2); color: #ff4b4b; }
-    .badge.orange { background-color: rgba(255, 165, 0, 0.2); color: #ffa500; }
-    .badge.pink { background-color: rgba(255, 0, 255, 0.2); color: #ff00ff; }
-    .trade-details { font-size: 12px; color: #8a92b2; margin-top: 8px; }
-    .pl-amount { font-size: 16px; font-weight: bold; text-align: right; }
-    div[role="radiogroup"] { justify-content: center; margin-bottom: 10px; }
-    .metric-box { background-color: #181b2f; border-radius: 8px; padding: 15px; text-align: center; border: 1px solid #2d334a; }
+    .ticker-name.naga { color: #ff00ff; text-shadow: 0 0 8px rgba(255,0,255,0.4); }
+    .badge { font-size: 11px; padding: 4px 10px; border-radius: 6px; background-color: #2d334a; color: #e2e8f0; margin-right: 5px; font-weight: 700; text-transform: uppercase; }
+    .badge.green { background-color: rgba(0, 204, 150, 0.15); color: #00cc96; border: 1px solid rgba(0, 204, 150, 0.3); }
+    .badge.red { background-color: rgba(239, 85, 59, 0.15); color: #ff4b4b; border: 1px solid rgba(239, 85, 59, 0.3); }
+    .badge.orange { background-color: rgba(255, 165, 0, 0.15); color: #ffa500; border: 1px solid rgba(255, 165, 0, 0.3); }
+    .badge.pink { background-color: rgba(255, 0, 255, 0.15); color: #ff00ff; border: 1px solid rgba(255, 0, 255, 0.3); }
+    .trade-details { font-size: 12px; color: #94a3b8; margin-top: 10px; }
+    .pl-amount { font-size: 18px; font-weight: 800; text-align: right; color: #f8fafc; }
     
-    /* Custom Box Evaluator */
-    .eval-box { background-color: #181b2f; border-radius: 10px; padding: 20px; border: 1px solid #2d334a; margin-top: 10px; }
+    /* Chart Container CSS */
+    .chart-container { background-color: #151a2d; border-radius: 12px; padding: 20px; border: 1px solid #2a314d; margin-top: 20px; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -176,7 +228,7 @@ def proses_data_eod(df, harga_idx_manual):
     df_olah['Status'] = df_olah['Profit_%'].apply(lambda x: 'WIN 🟢' if x > 0 else ('LOSS 🔴' if x < 0 else 'BEP ⚪'))
     return df_olah
 
-st.markdown("<h2 style='text-align: center;'>⚙️ Capelang Algo App <span style='font-size:16px; color:#8a92b2;'>v10.6 (Botaxx UI Edition)</span></h2>", unsafe_allow_html=True)
+st.markdown("<h2 style='text-align: center;'>⚙️ Capelang Algo App <span style='font-size:16px; color:#8a92b2;'>v11.3 (Bulletproof Chart Edition)</span></h2>", unsafe_allow_html=True)
 menu = st.radio("Mode:", ["📡 Live Radar", "📋 Evaluator Manual", "🏆 Evaluator EOD", "💼 Simulator Portofolio"], horizontal=True, label_visibility="collapsed")
 st.divider()
 
@@ -233,6 +285,9 @@ if menu == "📡 Live Radar":
         st.write("")
         st.markdown(f"""<div style='font-size:12px; color:#8a92b2;'><div style='display:flex; justify-content:space-between;'><span>Status Server:</span> <span style='color:#00cc96;'>✅ Terhubung</span></div><div style='display:flex; justify-content:space-between;'><span>Total Balok Saat Ini:</span> <span style='color:#3b82f6;'>{len(df_live) if not df_live.empty else 0} Balok</span></div></div>""", unsafe_allow_html=True)
         st.write("")
+        
+        auto_refresh = st.toggle("🔄 Auto-Refresh Radar (Matikan saat ngetik Search)", value=True)
+        
         if st.button("🧹 Bersihkan Radar (Mulai Hari Baru)", use_container_width=True):
             if r_client:
                 r_client.delete("live_signals"); st.rerun()
@@ -240,11 +295,18 @@ if menu == "📡 Live Radar":
         st.markdown('</div>', unsafe_allow_html=True)
 
     with col_kanan:
-        st.markdown("### 📡 Radar Rekomendasi AI")
+        c_jud, c_cari = st.columns([1.2, 1])
+        with c_jud:
+            st.markdown("### 📡 Radar Rekomendasi AI")
+        with c_cari:
+            search_query = st.text_input("Search", placeholder="🔍 Cari Saham / Balok / Status...", label_visibility="collapsed").strip().lower()
+
         if df_live.empty: st.info("✅ Menunggu balok sinyal pertama masuk atau upload file manual...")
         else:
             df_live_reversed = df_live.iloc[::-1]
             tickers_terbaru = df_live_reversed['Ticker'].drop_duplicates().tolist()
+            
+            card_count = 0
 
             for ticker in tickers_terbaru:
                 data_saham = df_live[df_live['Ticker'] == ticker]
@@ -259,6 +321,10 @@ if menu == "📡 Live Radar":
 
                 if "merah dihaka" in list_balok and not any(x in list_balok for x in ["14_Serok_Harga_Merah_Berbalik", "Rebound botbox", "Pantulan Cepat Pagi", "Kawal Atas VWAP", "Smart Money Akumulasi"]):
                     status_text = f"⚠️ AVOID: PISAU JATUH (Jebakan Ritel!)"; css_class, badge_class = "sell", "red"
+                elif "Clean Money Kuat" in list_balok and "Momentum Bandar Rasio" in list_balok and "Value Transaksi Besar" in list_balok:
+                    status_text = f"🐋 SUPER BUY: BANDAR TRANSAKSI GEDE ({jumlah_balok} Balok!)"; css_class, badge_class = "naga", "pink"
+                elif "Breakout Siang Valid" in list_balok and "MF_RMF_Kuat" in list_balok and "MO_Momentum_Sehat" in list_balok:
+                    status_text = f"☀️ STRONG BUY: MOMENTUM SIANG ({jumlah_balok} Balok!)"; css_class, badge_class = "buy", "green"
                 elif any(x in list_balok for x in ["MO_Trend_Ngegas_ADX", "MF_RMF_Kuat"]) and any(x in list_balok for x in ["TR_Super_Bullish", "Momentum Bandar Rasio"]) and any(x in list_balok for x in ["MO_Speed_Cepat", "Cross Up VWAP"]):
                     status_text = f"🔥 NAGA BANGKIT (Potensi Cuan 32%!)"; css_class, badge_class = "naga", "pink"
                 elif "Pantulan Cepat Pagi" in list_balok and "Rebound botbox" in list_balok and "Cross Up VWAP" in list_balok:
@@ -274,6 +340,14 @@ if menu == "📡 Live Radar":
                 elif jumlah_balok >= 2: status_text = f"⚙️ MERAKIT COMBO ({jumlah_balok} Balok)"; css_class, badge_class = "wait", "orange"
                 else: status_text = "🧱 WAIT (Cuma 1 Balok)"; css_class, badge_class = "wait", "orange"
 
+                if search_query:
+                    match_ticker = search_query in ticker.lower()
+                    match_algo = any(search_query in b.lower() for b in list_balok)
+                    match_status = search_query in status_text.lower()
+                    if not (match_ticker or match_algo or match_status):
+                        continue
+                
+                card_count += 1
                 gabungan_balok = " + ".join(list_balok)
                 st.markdown(f"""
                 <div class="trade-card {css_class}">
@@ -281,17 +355,28 @@ if menu == "📡 Live Radar":
                     <div class="trade-details">Komponen: <strong style='color:white;'>[{gabungan_balok}]</strong> <br> Jam Terakhir: {last_time}</div></div>
                     <div><div class="pl-amount" style="color:white;">Price: Rp {int(last_price)}</div></div>
                 </div>""", unsafe_allow_html=True)
+                
+            if search_query and card_count == 0:
+                st.info(f"⚠️ Nggak ada saham, balok, atau status yang cocok dengan pencarian '{search_query}'.")
 
     st.divider()
     st.markdown("### 📜 Rekap Sinyal Masuk (Live Tracker)")
     if not df_live.empty:
-        display_raw = df_live.iloc[::-1].reset_index(drop=True)
+        if search_query:
+            mask = df_live['Ticker'].str.lower().str.contains(search_query, na=False) | df_live['Algo'].str.lower().str.contains(search_query, na=False)
+            display_raw = df_live[mask].iloc[::-1].reset_index(drop=True)
+        else:
+            display_raw = df_live.iloc[::-1].reset_index(drop=True)
+            
         st.dataframe(display_raw.style.format({'Price': 'Rp {:,.0f}'}), use_container_width=True)
     else:
         st.info("Belum ada rekap sinyal yang masuk hari ini.")
-    time.sleep(1); st.rerun()
+        
+    if auto_refresh:
+        time.sleep(2) 
+        st.rerun()
 
-# --- ROMBAK TOTAL UI EVALUATOR MANUAL (BOTAXX STYLE) ---
+# --------------------------------------------------------
 elif menu == "📋 Evaluator Manual":
     st.markdown('<div class="eval-box">', unsafe_allow_html=True)
     st.info("Tempel sinyal dari Telegram. Sistem otomatis menarik Data Open dari Bursa secara Real-Time.")
@@ -315,7 +400,6 @@ elif menu == "📋 Evaluator Manual":
             
     st.divider()
     
-    # Panel Status Dinamis
     if st.session_state['manual_txt']:
         algo_match = re.search(r'Algo Name\s*:\s*(.+)', st.session_state['manual_txt'], re.IGNORECASE)
         algo_name = algo_match.group(1).strip() if algo_match else "Simulasi Algo Manual"
@@ -357,10 +441,11 @@ elif menu == "📋 Evaluator Manual":
 
 # --------------------------------------------------------
 elif menu in ["🏆 Evaluator EOD", "💼 Simulator Portofolio"]:
-    col1, col2 = st.columns(2)
+    col1, col2 = st.columns(2, gap="large")
     with col1:
-        st.markdown("### 1️⃣ Sumber Data Sinyal")
-        sumber_sinyal = st.radio("Pilih sumber sinyal lu:", ["📂 Upload Sinyal Manual (Telegram/CSV)", "📡 Otomatis (Google Sheets)"], key="rad_sinyal")
+        st.markdown('<div class="source-box">', unsafe_allow_html=True)
+        st.markdown("<h4 style='margin-bottom:15px;'>1️⃣ Sumber Data Sinyal</h4>", unsafe_allow_html=True)
+        sumber_sinyal = st.radio("Pilih sumber sinyal lu:", ["📂 Upload Sinyal Manual (Telegram/CSV)", "📡 Otomatis (Google Sheets)"], key="rad_sinyal", label_visibility="collapsed")
         if sumber_sinyal == "📂 Upload Sinyal Manual (Telegram/CSV)":
             if st.session_state['eod_mentah'].empty:
                 files_sinyal = st.file_uploader("Upload File Sinyal (Bisa Blok Banyak File Sekaligus)", type=['csv', 'txt'], accept_multiple_files=True)
@@ -377,27 +462,30 @@ elif menu in ["🏆 Evaluator EOD", "💼 Simulator Portofolio"]:
                     else: st.warning("⚠️ Tidak ada format sinyal valid yang ditemukan di file-file tersebut.")
             else:
                 st.success(f"✅ Data Sinyal Tersimpan di Memori ({len(st.session_state['eod_mentah'])} Sinyal).")
-                if st.button("🗑️ Ganti File Sinyal"): st.session_state['eod_mentah'] = pd.DataFrame(); st.session_state['eod_hasil'] = None; st.rerun()
+                if st.button("🔄 Ganti File Sinyal", use_container_width=True): st.session_state['eod_mentah'] = pd.DataFrame(); st.session_state['eod_hasil'] = None; st.rerun()
         else:
             try:
                 df_temp = pd.read_csv(SHEET_CSV_URL)
                 if not df_temp.empty: st.session_state['eod_mentah'] = standarisasi_kolom(df_temp); st.success(f"✅ Sinkronisasi Google Sheets Sukses ({len(st.session_state['eod_mentah'])} Sinyal).")
                 else: st.warning("Sheets Kosong")
             except Exception as e: st.error(f"⚠️ Gagal terhubung ke Google Sheets: {e}")
+        st.markdown('</div>', unsafe_allow_html=True)
 
     with col2:
-        st.markdown("### 2️⃣ Sumber Harga EOD (Penutupan)")
-        sumber_eod = st.radio("Pilih sumber harga EOD lu:", ["📊 Upload Data Resmi IDX (.xls/.xlsx/.csv/.txt)", "📡 Otomatis (Yahoo Finance)"], key="rad_eod")
+        st.markdown('<div class="source-box">', unsafe_allow_html=True)
+        st.markdown("<h4 style='margin-bottom:15px;'>2️⃣ Sumber Harga EOD (Penutupan)</h4>", unsafe_allow_html=True)
+        sumber_eod = st.radio("Pilih sumber harga EOD lu:", ["📊 Upload Data Resmi IDX (.xls/.xlsx/.csv/.txt)", "📡 Otomatis (Yahoo Finance)"], key="rad_eod", label_visibility="collapsed")
         if sumber_eod == "📊 Upload Data Resmi IDX (.xls/.xlsx/.csv/.txt)":
             if not st.session_state['eod_idx']:
                 file_idx = st.file_uploader("Upload File dari IDX", type=['xlsx', 'xls', 'csv', 'txt'])
                 if file_idx: st.session_state['eod_idx'] = parse_idx_data(file_idx); st.session_state['eod_hasil'] = None; st.rerun()
             else:
                 st.success(f"✅ Data IDX Tersimpan di Memori ({len(st.session_state['eod_idx'])} Emiten).")
-                if st.button("🗑️ Ganti File IDX"): st.session_state['eod_idx'] = {}; st.session_state['eod_hasil'] = None; st.rerun()
+                if st.button("🔄 Ganti File IDX", use_container_width=True): st.session_state['eod_idx'] = {}; st.session_state['eod_hasil'] = None; st.rerun()
         else:
             if st.session_state['eod_idx']: st.session_state['eod_idx'] = {}; st.session_state['eod_hasil'] = None; st.rerun()
             st.info("📡 AI akan menarik harga langsung dari Yahoo Finance.")
+        st.markdown('</div>', unsafe_allow_html=True)
 
     st.divider()
 
@@ -439,6 +527,10 @@ elif menu in ["🏆 Evaluator EOD", "💼 Simulator Portofolio"]:
                 def cek_sinyal_buy(algos):
                     list_b = [str(x).replace('"', '').strip() for x in algos]
                     if "merah dihaka" in list_b and not any(x in list_b for x in ["14_Serok_Harga_Merah_Berbalik", "Rebound botbox", "Pantulan Cepat Pagi", "Kawal Atas VWAP", "Smart Money Akumulasi"]): return "AVOID"
+                    
+                    if "Clean Money Kuat" in list_b and "Momentum Bandar Rasio" in list_b and "Value Transaksi Besar" in list_b: return "BANDAR TRANSAKSI GEDE"
+                    if "Breakout Siang Valid" in list_b and "MF_RMF_Kuat" in list_b and "MO_Momentum_Sehat" in list_b: return "MOMENTUM SIANG"
+                    
                     if any(x in list_b for x in ["MO_Trend_Ngegas_ADX", "MF_RMF_Kuat"]) and any(x in list_b for x in ["TR_Super_Bullish", "Momentum Bandar Rasio"]) and any(x in list_b for x in ["MO_Speed_Cepat", "Cross Up VWAP"]): return "NAGA BANGKIT"
                     if "Pantulan Cepat Pagi" in list_b and "Rebound botbox" in list_b and "Cross Up VWAP" in list_b: return "V-SHAPE REVERSAL"
                     if "Cross Up VWAP" in list_b and "GC MA Cleanmoney" in list_b and any(x in list_b for x in ["Breakout Siang Valid", "Persiapan Tembus Siang", "Ledakan Vol ma20", "Pantulan Cepat Pagi"]): return "TEMBUS VWAP"
@@ -454,7 +546,7 @@ elif menu in ["🏆 Evaluator EOD", "💼 Simulator Portofolio"]:
                     })
                 ).reset_index()
 
-                buy_trades = sim_data[sim_data['Sinyal AI'].isin(["NAGA BANGKIT", "V-SHAPE REVERSAL", "TEMBUS VWAP", "SEROK BAWAH", "BREAKOUT SIANG", "AKUMULASI BANDAR"])].copy()
+                buy_trades = sim_data[sim_data['Sinyal AI'].isin(["NAGA BANGKIT", "V-SHAPE REVERSAL", "TEMBUS VWAP", "SEROK BAWAH", "BREAKOUT SIANG", "AKUMULASI BANDAR", "BANDAR TRANSAKSI GEDE", "MOMENTUM SIANG"])].copy()
 
                 if not buy_trades.empty:
                     MODAL_AWAL = 500000000
@@ -470,16 +562,18 @@ elif menu in ["🏆 Evaluator EOD", "💼 Simulator Portofolio"]:
                     win_trades = len(buy_trades[buy_trades['PnL (Rp)'] > 0])
                     win_rate = (win_trades / len(buy_trades)) * 100
 
-                    st.subheader("💼 Simulator Portofolio AI Capelang")
+                    st.markdown("<h3 style='margin-bottom:5px;'>💼 Simulator Portofolio AI Capelang</h3>", unsafe_allow_html=True)
                     st.caption("Asumsi: Modal Awal Rp 500 Juta | Pembelian Rp 10 Juta per Emiten (Sesuai Resep Combo Live Radar)")
+                    st.write("")
 
-                    c1, c2, c3, c4 = st.columns(4)
-                    c1.markdown(f"<div class='metric-box'><h5 style='color:#8a92b2; margin:0;'>Modal Awal</h5><h3 style='margin:0; color:#00cc96;'>Rp {MODAL_AWAL:,.0f}</h3></div>", unsafe_allow_html=True)
-                    c2.markdown(f"<div class='metric-box'><h5 style='color:#8a92b2; margin:0;'>Modal Terpakai (Buy Sinyal)</h5><h3 style='margin:0; color:#3b82f6;'>Rp {total_terpakai:,.0f}</h3></div>", unsafe_allow_html=True)
+                    c1, c2, c3, c4 = st.columns(4, gap="medium")
+                    c1.markdown(f"<div class='metric-box'><div class='metric-title'>Modal Awal</div><div class='metric-value' style='color:#00cc96;'>Rp {MODAL_AWAL:,.0f}</div></div>", unsafe_allow_html=True)
+                    c2.markdown(f"<div class='metric-box'><div class='metric-title'>Modal Terpakai (Buy)</div><div class='metric-value' style='color:#3b82f6;'>Rp {total_terpakai:,.0f}</div></div>", unsafe_allow_html=True)
                     warna_pnl = "#00cc96" if total_pnl > 0 else "#ff4b4b"
-                    c3.markdown(f"<div class='metric-box'><h5 style='color:#8a92b2; margin:0;'>Total Profit/Loss EOD</h5><h3 style='margin:0; color:{warna_pnl};'>Rp {total_pnl:,.0f}</h3></div>", unsafe_allow_html=True)
-                    c4.markdown(f"<div class='metric-box'><h5 style='color:#8a92b2; margin:0;'>Win Rate Trade</h5><h3 style='margin:0; color:#ff00ff;'>{win_rate:.1f}%</h3><p style='margin:0; font-size:12px; color:#8a92b2;'>({win_trades} Win dari {len(buy_trades)} Emiten)</p></div>", unsafe_allow_html=True)
+                    c3.markdown(f"<div class='metric-box'><div class='metric-title'>Total PnL EOD</div><div class='metric-value' style='color:{warna_pnl};'>Rp {total_pnl:,.0f}</div></div>", unsafe_allow_html=True)
+                    c4.markdown(f"<div class='metric-box'><div class='metric-title'>Win Rate Trade</div><div class='metric-value' style='color:#ff00ff;'>{win_rate:.1f}%</div><div style='font-size:12px; color:#64748b; margin-top:5px;'>({win_trades} Win dari {len(buy_trades)} Emiten)</div></div>", unsafe_allow_html=True)
 
+                    st.write("")
                     st.write("")
                     st.markdown("##### 📝 Histori Sinyal Eksekusi BUY")
                     display_df = buy_trades[['Ticker', 'Sinyal AI', 'Lot', 'Harga Entry', 'Harga EOD', 'Max High', 'Modal Terpakai', 'PnL (Rp)', 'Profit (%)', 'Status']]
@@ -487,5 +581,56 @@ elif menu in ["🏆 Evaluator EOD", "💼 Simulator Portofolio"]:
                         'Lot': '{:.0f}', 'Harga Entry': 'Rp {:,.0f}', 'Harga EOD': 'Rp {:,.0f}', 'Max High': 'Rp {:,.0f}',
                         'Modal Terpakai': 'Rp {:,.0f}', 'PnL (Rp)': 'Rp {:,.0f}', 'Profit (%)': '{:+.2f}%'
                     }).map(lambda x: 'color: #00cc96;' if x == 'WIN 🟢' else ('color: #ff4b4b;' if x == 'LOSS 🔴' else ''), subset=['Status']), use_container_width=True, hide_index=True)
+                    
+                    # ==========================================
+                    # --- TAMBAHAN GRAFIK PLOTLY DI SINI ---
+                    # ==========================================
+                    st.write("")
+                    st.markdown("<div class='chart-container'>", unsafe_allow_html=True)
+                    st.markdown("<h5 style='margin-bottom:15px;'>📈 Visualisasi Profit/Loss per Emiten</h5>", unsafe_allow_html=True)
+                    
+                    # --- FIX: GANTI PX JADI GO.FIGURE BIAR ANTI ERROR ---
+                    warna_dasar = {'WIN 🟢': '#00cc96', 'LOSS 🔴': '#ff4b4b', 'BEP ⚪': '#64748b'}
+                    
+                    fig = go.Figure()
+                    
+                    # Filter khusus data yang mau digambar
+                    buy_trades_chart = buy_trades.dropna(subset=['Ticker', 'PnL (Rp)', 'Status'])
+                    
+                    # Bikin chart manual per status biar Plotly gak bingung
+                    for status in ['WIN 🟢', 'LOSS 🔴', 'BEP ⚪']:
+                        group = buy_trades_chart[buy_trades_chart['Status'] == status]
+                        if not group.empty:
+                            fig.add_trace(go.Bar(
+                                x=group['Ticker'],
+                                y=group['PnL (Rp)'],
+                                name=status,
+                                marker_color=warna_dasar.get(status, '#64748b'),
+                                text=group['PnL (Rp)'],
+                                texttemplate='Rp %{text:,.0f}',
+                                textposition='outside',
+                                textfont=dict(size=11),
+                                hovertemplate="<b>%{x}</b><br>PnL: Rp %{y:,.0f}<br>Sinyal: %{customdata[0]}<br>Profit: %{customdata[1]:.2f}%<extra></extra>",
+                                customdata=group[['Sinyal AI', 'Profit (%)']]
+                            ))
+                    
+                    # Riasan kosmetik grafiknya
+                    fig.update_layout(
+                        template="plotly_dark",
+                        plot_bgcolor='rgba(0,0,0,0)', 
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        margin=dict(t=20, b=20, l=0, r=0),
+                        font=dict(color='#94a3b8'),
+                        xaxis_title="", 
+                        yaxis_title="Rupiah (Rp)",
+                        showlegend=True,
+                        legend_title_text=''
+                    )
+                    
+                    # Nampilin grafik ke Streamlit
+                    st.plotly_chart(fig, use_container_width=True)
+                    st.markdown("</div>", unsafe_allow_html=True)
+                    # ==========================================
+
                 else:
                     st.info("⚠️ Tidak ada sinyal BUY valid (Resep Combo) yang dihasilkan dari data ini.")
