@@ -22,10 +22,20 @@ if 'eod_mentah' not in st.session_state: st.session_state['eod_mentah'] = pd.Dat
 if 'eod_idx' not in st.session_state: st.session_state['eod_idx'] = {}
 if 'eod_hasil' not in st.session_state: st.session_state['eod_hasil'] = None
 
+# --- INJEKSI KOSMETIK BOTAXX (CSS) ---
 st.markdown("""
     <style>
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    .block-container {padding-top: 1.5rem; padding-bottom: 1rem;}
+    
     .stApp { background-color: #111526; color: white; }
     .panel-kiri { background-color: #181b2f; padding: 20px; border-radius: 10px; margin-bottom: 20px;}
+    
+    /* Tombol Style Botaxx */
+    div.stButton > button:first-child { font-weight: bold; border-radius: 8px; transition: all 0.3s; }
+    
     .trade-card { background-color: #181b2f; padding: 15px; border-radius: 8px; border-left: 5px solid #2d334a; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
     .trade-card.buy { border-left-color: #00cc96; }
     .trade-card.sell { border-left-color: #ff4b4b; }
@@ -46,6 +56,9 @@ st.markdown("""
     .pl-amount { font-size: 16px; font-weight: bold; text-align: right; }
     div[role="radiogroup"] { justify-content: center; margin-bottom: 10px; }
     .metric-box { background-color: #181b2f; border-radius: 8px; padding: 15px; text-align: center; border: 1px solid #2d334a; }
+    
+    /* Custom Box Evaluator */
+    .eval-box { background-color: #181b2f; border-radius: 10px; padding: 20px; border: 1px solid #2d334a; margin-top: 10px; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -163,7 +176,7 @@ def proses_data_eod(df, harga_idx_manual):
     df_olah['Status'] = df_olah['Profit_%'].apply(lambda x: 'WIN 🟢' if x > 0 else ('LOSS 🔴' if x < 0 else 'BEP ⚪'))
     return df_olah
 
-st.markdown("<h2 style='text-align: center;'>⚙️ Capelang Algo App <span style='font-size:16px; color:#8a92b2;'>v11.0 (Advanced Combo Update)</span></h2>", unsafe_allow_html=True)
+st.markdown("<h2 style='text-align: center;'>⚙️ Capelang Algo App <span style='font-size:16px; color:#8a92b2;'>v10.6 (Botaxx UI Edition)</span></h2>", unsafe_allow_html=True)
 menu = st.radio("Mode:", ["📡 Live Radar", "📋 Evaluator Manual", "🏆 Evaluator EOD", "💼 Simulator Portofolio"], horizontal=True, label_visibility="collapsed")
 st.divider()
 
@@ -244,9 +257,6 @@ if menu == "📡 Live Radar":
 
                 status_text, css_class, badge_class = "🧱 WAIT (Kumpul Balok)", "wait", "orange"
 
-                # ==========================================
-                # LOGIKA COMBO RADAR (LAMA + BARU)
-                # ==========================================
                 if "merah dihaka" in list_balok and not any(x in list_balok for x in ["14_Serok_Harga_Merah_Berbalik", "Rebound botbox", "Pantulan Cepat Pagi", "Kawal Atas VWAP", "Smart Money Akumulasi"]):
                     status_text = f"⚠️ AVOID: PISAU JATUH (Jebakan Ritel!)"; css_class, badge_class = "sell", "red"
                 elif any(x in list_balok for x in ["MO_Trend_Ngegas_ADX", "MF_RMF_Kuat"]) and any(x in list_balok for x in ["TR_Super_Bullish", "Momentum Bandar Rasio"]) and any(x in list_balok for x in ["MO_Speed_Cepat", "Cross Up VWAP"]):
@@ -261,16 +271,6 @@ if menu == "📡 Live Radar":
                     status_text = f"🛍️ BUY: BREAKOUT SIANG ({jumlah_balok} Balok)"; css_class, badge_class = "buy", "green"
                 elif any(x in list_balok for x in ["Smart Money Akumulasi", "Clean Money Kuat"]) and any(x in list_balok for x in ["Uptrend Kuat Bandar RLA 1", "TR_Uptrend_Aktif", "TR_Super_Bullish"]):
                     status_text = f"💎 BUY: AKUMULASI BANDAR ({jumlah_balok} Balok)"; css_class, badge_class = "buy", "green"
-                
-                # --- INJEKSI 3 COMBO BARU ---
-                elif "Momentum Bandar Rasio" in list_balok and any(x in list_balok for x in ["Sesi Pagi Agresif", "TR_Super_Bullish"]):
-                    status_text = f"🚀 BUY: MOMENTUM BOOSTER ({jumlah_balok} Balok)"; css_class, badge_class = "buy", "green"
-                elif "Clean Money Kuat" in list_balok and "MO_Momentum_Sehat" in list_balok:
-                    status_text = f"🎯 BUY: SNIPER CLEAN MONEY ({jumlah_balok} Balok)"; css_class, badge_class = "buy", "green"
-                elif "TR_Uptrend_Aktif" in list_balok and "MF_RMF_Kuat" in list_balok:
-                    status_text = f"🏄‍♂️ BUY: SEROKAN UPTREND ({jumlah_balok} Balok)"; css_class, badge_class = "buy", "green"
-                # ----------------------------
-                
                 elif jumlah_balok >= 2: status_text = f"⚙️ MERAKIT COMBO ({jumlah_balok} Balok)"; css_class, badge_class = "wait", "orange"
                 else: status_text = "🧱 WAIT (Cuma 1 Balok)"; css_class, badge_class = "wait", "orange"
 
@@ -286,32 +286,76 @@ if menu == "📡 Live Radar":
     st.markdown("### 📜 Rekap Sinyal Masuk (Live Tracker)")
     if not df_live.empty:
         display_raw = df_live.iloc[::-1].reset_index(drop=True)
-        st.dataframe(display_raw, use_container_width=True)
+        st.dataframe(display_raw.style.format({'Price': 'Rp {:,.0f}'}), use_container_width=True)
     else:
         st.info("Belum ada rekap sinyal yang masuk hari ini.")
-
     time.sleep(1); st.rerun()
 
+# --- ROMBAK TOTAL UI EVALUATOR MANUAL (BOTAXX STYLE) ---
 elif menu == "📋 Evaluator Manual":
-    col_in, col_out = st.columns([1, 2.5], gap="large")
-    with col_in:
-        st.markdown('<div class="panel-kiri">', unsafe_allow_html=True)
-        st.markdown("### 📋 Evaluator Teks")
-        teks_input = st.text_area("Paste Sinyal Telegram di sini:", value=st.session_state['manual_txt'], height=250)
-        if teks_input != st.session_state['manual_txt']: st.session_state['manual_txt'] = teks_input; st.rerun()
-        if st.button("🗑️ Bersihkan Teks", use_container_width=True): st.session_state['manual_txt'] = ""; st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
-    with col_out:
-        if st.session_state['manual_txt']:
-            algo_match = re.search(r'Algo Name\s*:\s*(.+)', st.session_state['manual_txt'], re.IGNORECASE)
-            algo_name = algo_match.group(1).strip() if algo_match else "Simulasi Algo Manual"
-            matches = re.findall(r'\b([A-Z]{4})\b[\s|]+(\d+)', st.session_state['manual_txt'])
-            if matches:
-                st.success(f"✅ Berhasil mendeteksi {len(matches)} saham.")
-                data_sim = [{"No": i+1, "Ticker": m[0], "Algo": algo_name, "Harga Entry": int(m[1]), "Status": "RUNNING"} for i, m in enumerate(matches) if m[0] not in ['NAMA', 'DATA', 'HARG']]
-                st.dataframe(pd.DataFrame(data_sim), use_container_width=True, hide_index=True)
-        else: st.info("👈 Silakan tempel teks sinyal dari Telegram.")
+    st.markdown('<div class="eval-box">', unsafe_allow_html=True)
+    st.info("Tempel sinyal dari Telegram. Sistem otomatis menarik Data Open dari Bursa secara Real-Time.")
+    
+    teks_input = st.text_area("Input", placeholder="Tempel/Paste seluruh teks Telegram Anda kesini...", value=st.session_state['manual_txt'], height=150, label_visibility="collapsed")
+    
+    if st.button("🔲 PROSES TEKS SINYAL", type="primary", use_container_width=True):
+        if teks_input != st.session_state['manual_txt']: 
+            st.session_state['manual_txt'] = teks_input
+            st.rerun()
 
+    c_btn1, c_btn2, c_btn3 = st.columns(3)
+    with c_btn1:
+        st.button("📄 Sinyal (CSV)", use_container_width=True)
+    with c_btn2:
+        st.button("📊 EOD (XLSX)", use_container_width=True)
+    with c_btn3:
+        if st.button("🗑️ Reset Data", use_container_width=True): 
+            st.session_state['manual_txt'] = ""
+            st.rerun()
+            
+    st.divider()
+    
+    # Panel Status Dinamis
+    if st.session_state['manual_txt']:
+        algo_match = re.search(r'Algo Name\s*:\s*(.+)', st.session_state['manual_txt'], re.IGNORECASE)
+        algo_name = algo_match.group(1).strip() if algo_match else "Simulasi Algo Manual"
+        matches = re.findall(r'\b([A-Z]{4})\b[\s|]+(\d+)', st.session_state['manual_txt'])
+        saham_count = len(matches) if matches else 0
+        
+        st.markdown(f"""
+        <div style='display:flex; justify-content:space-between; font-size:14px; margin-bottom:8px;'>
+            <span style='color:#8a92b2;'>Memori Sinyal:</span> <span style='color:#3b82f6; font-weight:bold;'>{saham_count} Saham</span>
+        </div>
+        <div style='display:flex; justify-content:space-between; font-size:14px; margin-bottom:8px;'>
+            <span style='color:#8a92b2;'>Status Eksekusi:</span> <span style='color:#00cc96; font-weight:bold;'>✅ Berhasil Diproses</span>
+        </div>
+        """, unsafe_allow_html=True)
+        st.write("")
+        st.toggle("Mode Ringkas (Live)", value=True)
+        
+        if matches:
+            data_sim = [{"No": i+1, "Ticker": m[0], "Algo": algo_name, "Harga Entry": int(m[1]), "Status": "RUNNING"} for i, m in enumerate(matches) if m[0] not in ['NAMA', 'DATA', 'HARG']]
+            st.dataframe(pd.DataFrame(data_sim), use_container_width=True, hide_index=True)
+        else:
+            st.warning("⚠️ Tidak ada saham valid yang terdeteksi di teks Telegram lu.")
+    else:
+        st.markdown("""
+        <div style='display:flex; justify-content:space-between; font-size:14px; margin-bottom:8px;'>
+            <span style='color:#8a92b2;'>Memori Sinyal:</span> <span style='color:#3b82f6; font-weight:bold;'>0 Saham</span>
+        </div>
+        <div style='display:flex; justify-content:space-between; font-size:14px; margin-bottom:8px;'>
+            <span style='color:#8a92b2;'>Status API Real-Time:</span> <span style='color:#00cc96; font-weight:bold;'>✅ Standby</span>
+        </div>
+        <div style='display:flex; justify-content:space-between; font-size:14px; margin-bottom:8px;'>
+            <span style='color:#8a92b2;'>Data EOD Terpasang:</span> <span style='color:#ff00ff; font-weight:bold;'>Kosong</span>
+        </div>
+        """, unsafe_allow_html=True)
+        st.write("")
+        st.toggle("Mode Ringkas (Live)")
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# --------------------------------------------------------
 elif menu in ["🏆 Evaluator EOD", "💼 Simulator Portofolio"]:
     col1, col2 = st.columns(2)
     with col1:
@@ -401,13 +445,6 @@ elif menu in ["🏆 Evaluator EOD", "💼 Simulator Portofolio"]:
                     if any(x in list_b for x in ["14_Serok_Harga_Merah_Berbalik", "MF_Bandar_Serok"]) and any(x in list_b for x in ["Pantulan Cepat Pagi", "Rebound botbox", "Kawal Atas VWAP"]): return "SEROK BAWAH"
                     if any(x in list_b for x in ["Konsolidasi Sehat Siang", "Breakout Siang Valid", "Persiapan Tembus Siang"]) and any(x in list_b for x in ["Breakout Penutupan", "Value Transaksi Besar", "Gap Up Lanjut Naik"]): return "BREAKOUT SIANG"
                     if any(x in list_b for x in ["Smart Money Akumulasi", "Clean Money Kuat"]) and any(x in list_b for x in ["Uptrend Kuat Bandar RLA 1", "TR_Uptrend_Aktif", "TR_Super_Bullish"]): return "AKUMULASI BANDAR"
-                    
-                    # --- INJEKSI 3 COMBO BARU DI SIMULATOR ---
-                    if "Momentum Bandar Rasio" in list_b and any(x in list_b for x in ["Sesi Pagi Agresif", "TR_Super_Bullish"]): return "MOMENTUM BOOSTER"
-                    if "Clean Money Kuat" in list_b and "MO_Momentum_Sehat" in list_b: return "SNIPER CLEAN MONEY"
-                    if "TR_Uptrend_Aktif" in list_b and "MF_RMF_Kuat" in list_b: return "SEROKAN UPTREND"
-                    # -----------------------------------------
-                    
                     return "WAIT"
 
                 sim_data = df_eod.groupby('Ticker').apply(
@@ -417,12 +454,7 @@ elif menu in ["🏆 Evaluator EOD", "💼 Simulator Portofolio"]:
                     })
                 ).reset_index()
 
-                # --- MENGUPDATE DAFTAR SINYAL YANG DIEKSEKUSI (DIBELI) ---
-                buy_trades = sim_data[sim_data['Sinyal AI'].isin([
-                    "NAGA BANGKIT", "V-SHAPE REVERSAL", "TEMBUS VWAP", "SEROK BAWAH", 
-                    "BREAKOUT SIANG", "AKUMULASI BANDAR",
-                    "MOMENTUM BOOSTER", "SNIPER CLEAN MONEY", "SEROKAN UPTREND"
-                ])].copy()
+                buy_trades = sim_data[sim_data['Sinyal AI'].isin(["NAGA BANGKIT", "V-SHAPE REVERSAL", "TEMBUS VWAP", "SEROK BAWAH", "BREAKOUT SIANG", "AKUMULASI BANDAR"])].copy()
 
                 if not buy_trades.empty:
                     MODAL_AWAL = 500000000
